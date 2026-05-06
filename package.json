@@ -1,0 +1,21 @@
+{
+  "name": "automatizacion-iol",
+  "version": "0.1.0",
+  "description": "Trading bot algorítmico integrado con la API de InvertirOnline",
+  "type": "module",
+  "scripts": {
+    "fetch-quotes": "node scripts/fetchQuotes.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "prisma": "^5.22.0",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

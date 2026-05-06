@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Recurse \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\" -Exclude \"node_modules\",\"package-lock.json\" | Where-Object { $_.FullName -notmatch \"node_modules\" } | Select-Object FullName | Sort-Object FullName)",
+      "PowerShell(cmd /c \"dir /s /b c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL | findstr /v node_modules\")"
+    ]
+  }
+}
