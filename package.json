@@ -17,5 +17,8 @@
   },
   "devDependencies": {
     "vitest": "^2.1.8"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }

@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "PowerShell(Get-ChildItem -Recurse \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\" -Exclude \"node_modules\",\"package-lock.json\" | Where-Object { $_.FullName -notmatch \"node_modules\" } | Select-Object FullName | Sort-Object FullName)",
-      "PowerShell(cmd /c \"dir /s /b c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL | findstr /v node_modules\")"
+      "PowerShell(cmd /c \"dir /s /b c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL | findstr /v node_modules\")",
+      "PowerShell(cd \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\"; $proc = Start-Process -FilePath \"node\" -ArgumentList \"scripts/fetchQuotes.js\" -PassThru -RedirectStandardOutput \"$env:TEMP\\\\iol_out.txt\" -RedirectStandardError \"$env:TEMP\\\\iol_err.txt\"; Start-Sleep -Seconds 12; Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue; Get-Content \"$env:TEMP\\\\iol_out.txt\"; Get-Content \"$env:TEMP\\\\iol_err.txt\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\tests\\\\unit\\\\persistence\")",
+      "PowerShell(cd \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\"; $proc = Start-Process -FilePath \"node\" -ArgumentList \"scripts/fetchQuotes.js\" -PassThru -RedirectStandardOutput \"$env:TEMP\\\\iol_out2.txt\" -RedirectStandardError \"$env:TEMP\\\\iol_err2.txt\"; Start-Sleep -Seconds 65; Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue; Get-Content \"$env:TEMP\\\\iol_out2.txt\"; Get-Content \"$env:TEMP\\\\iol_err2.txt\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\src\\\\strategy\\\\strategies\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\tests\\\\unit\\\\strategy\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\tests\\\\unit\\\\risk\")",
+      "PowerShell($ms = Get-Content \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\src\\\\strategy\\\\strategies\\\\myStrategy.js\" | Select-String \"return SIGNALS.HOLD\" -SimpleMatch; $ex = Get-Content \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\src\\\\execution\\\\executionEngine.js\" | Select-String \"export default \\\\{\\\\}\" -SimpleMatch; \"myStrategy return HOLD: $\\($ms.Count\\)\"; \"executionEngine export default {}: $\\($ex.Count\\)\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\tests\\\\unit\\\\execution\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\docs\")",
+      "PowerShell(cd \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\"; node -e \"import\\('dotenv/config'\\).then\\(\\(\\)=>import\\('./src/persistence/prismaClient.js'\\)\\).then\\(m=>m.default.order.count\\(\\).then\\(n=>{console.log\\('orders count:',n\\);return m.default.$disconnect\\(\\)}\\)\\)\" 2>&1)",
+      "PowerShell($arch = \\(Select-String -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\docs\\\\archivos.md\" -Pattern \"^###\" | Measure-Object\\).Count; $func = \\(Select-String -Path \"c:\\\\Users\\\\Usuario\\\\Documents\\\\GitHub\\\\automatizacion-IOL\\\\docs\\\\funciones.md\" -Pattern \"^###\" | Measure-Object\\).Count; \"archivos.md entries: $arch | funciones.md entries: $func\")"
     ]
   }
 }

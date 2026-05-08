@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Asset {
+  id        Int       @id @default(autoincrement())
+  symbol    String
+  market    String
+  type      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  priceHistory  PriceHistory[]
+  priceTicks    PriceTick[]
+  decisions     Decision[]
+  orders        Order[]
+  positions     Position[]
+
+  @@unique([symbol, market])
+  @@map("assets")
+}
+
+model PriceHistory {
+  id        Int      @id @default(autoincrement())
+  assetId   Int      @map("asset_id")
+  date      DateTime @db.Date
+  open      Decimal
+  high      Decimal
+  low       Decimal
+  close     Decimal
+  volume    BigInt?
+  source    String   @default("iol")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, date])
+  @@index([assetId, date])
+  @@map("price_history")
+}
+
+model PriceTick {
+  id         Int      @id @default(autoincrement())
+  assetId    Int      @map("asset_id")
+  price      Decimal
+  open       Decimal?
+  high       Decimal?
+  low        Decimal?
+  volume     BigInt?
+  capturedAt DateTime @default(now()) @map("captured_at")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@index([assetId, capturedAt])
+  @@map("price_ticks")
+}
+
+model Decision {
+  id              Int      @id @default(autoincrement())
+  assetId         Int      @map("asset_id")
+  signal          String
+  strategy        String
+  priceAtDecision Decimal  @map("price_at_decision")
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  asset  Asset   @relation(fields: [assetId], references: [id])
+  orders Order[]
+
+  @@map("decisions")
+}
+
+model Order {
+  id          Int      @id @default(autoincrement())
+  decisionId  Int?     @map("decision_id")
+  assetId     Int      @map("asset_id")
+  iolOrderId  String?  @map("iol_order_id")
+  side        String
+  quantity    Decimal
+  price       Decimal
+  status      String   @default("pending")
+  iolResponse Json?    @map("iol_response")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  asset    Asset     @relation(fields: [assetId], references: [id])
+  decision Decision? @relation(fields: [decisionId], references: [id])
+
+  @@map("orders")
+}
+
+model Position {
+  id            Int      @id @default(autoincrement())
+  assetId       Int      @unique @map("asset_id")
+  quantity      Decimal
+  avgCost       Decimal  @map("avg_cost")
+  currentPrice  Decimal  @map("current_price")
+  unrealizedPnl Decimal  @map("unrealized_pnl")
+  openedAt      DateTime @map("opened_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("positions")
+}
+
+model BotState {
+  id                Int       @id @default(autoincrement())
+  capitalTotal      Decimal   @map("capital_total")
+  capitalAvailable  Decimal   @map("capital_available")
+  realizedPnl       Decimal   @default(0) @map("realized_pnl")
+  unrealizedPnl     Decimal   @default(0) @map("unrealized_pnl")
+  maxDrawdown       Decimal   @default(0) @map("max_drawdown")
+  peakCapital       Decimal   @map("peak_capital")
+  totalOperations   Int       @default(0) @map("total_operations")
+  winningOperations Int       @default(0) @map("winning_operations")
+  lastCycleAt       DateTime? @map("last_cycle_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("bot_state")
+}
