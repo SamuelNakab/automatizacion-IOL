@@ -2,6 +2,24 @@
 
 ---
 
+## src/monitoring/emailAlert.js
+
+### sendAlert(type, data)  *(async)*
+**Qué hace:** Envía un email HTML al destinatario configurado. Si el módulo no está configurado (`isConfigured=false`), retorna silenciosamente. Si el envío falla, loguea el error con `logger.error` y retorna — nunca relanza el error.
+**Parámetros:**
+- `type` — `'BOT_START'` | `'ORDER_FILLED'` | `'DRAWDOWN_ALERT'` | `'CRITICAL_ERROR'` | `'BOT_STOP'`
+- `data` — objeto con campos específicos por tipo:
+  - BOT_START: `{ dryRun, pollInterval, capital }`
+  - ORDER_FILLED: `{ symbol, side, quantity, price, pnl }`
+  - DRAWDOWN_ALERT: `{ current, limit }`
+  - CRITICAL_ERROR: `{ message, context }`
+  - BOT_STOP: `{ reason }`
+**Retorna:** `Promise<void>`
+**Efectos secundarios:** envía email via Gmail SMTP; loguea éxito o error
+**Llamada desde:** `src/orchestrator/orchestrator.js` (start, stop, runCycle)
+
+---
+
 ## src/shared/marketHours.js
 
 ### isMarketOpen()

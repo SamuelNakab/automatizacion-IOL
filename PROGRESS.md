@@ -208,3 +208,45 @@ Con señales BUY/SELL reales (cuando hay suficientes datos), las órdenes aparec
 - Cada 60s (ORDER_POLL_INTERVAL_MS): consulta estado de órdenes 'sent' en IOL
 - Al arrancar: resuelve órdenes huérfanas (> ORPHAN_ORDER_TIMEOUT_MIN minutos)
 - SIGINT/SIGTERM → detención limpia con "Bot detenido limpiamente."
+
+---
+
+## Fase 7A: Alertas por email (Nodemailer) — COMPLETA
+**Fecha:** 2026-05-08
+
+### Archivos creados / modificados
+| Archivo | Descripción |
+|---|---|
+| `src/monitoring/emailAlert.js` | Singleton Nodemailer + Gmail. isConfigured=false si faltan vars. sendAlert() nunca detiene el bot |
+| `scripts/testEmail.js` | Envía email de prueba BOT_START para verificar credenciales |
+| `src/orchestrator/orchestrator.js` | Integración: emailAlert como dep inyectada; BOT_START en start(), BOT_STOP en stop(), ORDER_FILLED + DRAWDOWN_ALERT + CRITICAL_ERROR en runCycle() |
+| `scripts/startBot.js` | Importa emailAlert y lo pasa al constructor del Orchestrator |
+| `tests/unit/monitoring/emailAlert.test.js` | 8 tests: sin env, con env, sendMail exitoso, error silenciado, DASHBOARD_URL, ORDER_FILLED, DRAWDOWN_ALERT |
+| `docs/archivos.md` / `docs/funciones.md` | Actualizados con emailAlert.js y testEmail.js |
+
+### Verificaciones completadas
+1. ✅ `npx vitest run` → **100/100 tests** (14 archivos de test)
+2. ✅ `node scripts/testEmail.js` → email BOT_START entregado a samuelnakab@gmail.com sin errores
+3. ✅ `npm start` → loguea config, envía email BOT_START, obtiene token IOL, ciclos cada 30s
+4. ✅ Un fallo de email NO detiene el bot (error silenciado con logger.error)
+5. ✅ `DRY_RUN=true` en .env
+6. ✅ `myStrategy.js` intacto
+
+### Eventos de alerta configurados
+| Evento | Cuándo se dispara |
+|---|---|
+| BOT_START | Al arrancar el bot (`orchestrator.start()`) |
+| BOT_STOP | Al detener el bot con SIGINT/SIGTERM |
+| ORDER_FILLED | Si se ejecuta una orden Y `ALERT_ON_ORDER=true` |
+| DRAWDOWN_ALERT | Si drawdown >= ALERT_DRAWDOWN_PCT (default: 10%) |
+| CRITICAL_ERROR | Ante cualquier excepción en `runCycle()` |
+
+### Variables de entorno (Fase 7A)
+```
+ALERT_EMAIL_FROM=     # Cuenta Gmail remitente
+ALERT_EMAIL_TO=       # Destinatario de las alertas
+ALERT_EMAIL_PASSWORD= # App password de Google (no la contraseña real)
+ALERT_ON_ORDER=true   # Activar alertas por orden ejecutada
+ALERT_DRAWDOWN_PCT=10 # Umbral de drawdown para alerta (%)
+DASHBOARD_URL=        # Opcional — se incluye en todos los mails
+```

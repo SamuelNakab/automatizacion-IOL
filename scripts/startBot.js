@@ -6,6 +6,7 @@ import ExecutionEngine       from '../src/execution/executionEngine.js'
 import { updateUnrealizedPnl, confirmOrderFilled } from '../src/orchestrator/positionUpdater.js'
 import { pollPendingOrders, resolveOrphanOrders }  from '../src/orchestrator/orderPoller.js'
 import Orchestrator          from '../src/orchestrator/orchestrator.js'
+import * as emailAlert       from '../src/monitoring/emailAlert.js'
 import { RISK_CONFIG }       from '../src/shared/riskConfig.js'
 import logger                from '../src/shared/logger.js'
 
@@ -20,12 +21,12 @@ if (process.env.DRY_RUN !== 'true') {
 
 // Loguear configuración activa (sin credenciales)
 logger.info('Configuración del bot', {
-  baseUrl:       process.env.IOL_BASE_URL,
-  dryRun:        process.env.DRY_RUN,
+  baseUrl:        process.env.IOL_BASE_URL,
+  dryRun:         process.env.DRY_RUN,
   pollIntervalMs: process.env.POLL_INTERVAL_MS,
-  marketOpen:    process.env.MARKET_OPEN_HOUR  ?? '10',
-  marketClose:   process.env.MARKET_CLOSE_HOUR ?? '17',
-  riskConfig:    RISK_CONFIG,
+  marketOpen:     process.env.MARKET_OPEN_HOUR  ?? '10',
+  marketClose:    process.env.MARKET_CLOSE_HOUR ?? '17',
+  riskConfig:     RISK_CONFIG,
 })
 
 // Instanciar dependencias
@@ -42,6 +43,7 @@ const orchestrator = new Orchestrator({
   executionEngine,
   positionUpdater,
   orderPoller,
+  emailAlert,
 })
 
 await orchestrator.start()

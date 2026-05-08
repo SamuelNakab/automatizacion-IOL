@@ -2,6 +2,25 @@
 
 ---
 
+## src/monitoring/ (Fase 7A)
+
+### emailAlert.js
+**Propósito:** Singleton de alertas por email via Nodemailer + Gmail app password. Se auto-configura al importar: si ALERT_EMAIL_FROM/TO/PASSWORD están presentes crea el transporter; de lo contrario loguea advertencia y desactiva alertas. Un fallo de envío nunca detiene el bot — se loguea y se ignora. Soporta 5 tipos de evento: BOT_START, ORDER_FILLED, DRAWDOWN_ALERT, CRITICAL_ERROR, BOT_STOP.
+**Exporta:** `sendAlert(type, data)` (named export, async)
+**Usado por:** `src/orchestrator/orchestrator.js`, `scripts/testEmail.js`
+**Depende de:** `nodemailer`, `src/shared/logger.js`, `process.env`
+
+---
+
+## scripts/ (nuevos en Fase 7A)
+
+### testEmail.js
+**Propósito:** Script de verificación manual. Envía un email de prueba BOT_START a la dirección configurada en ALERT_EMAIL_TO. Ejecutar una vez antes de arrancar el bot para confirmar que las credenciales Gmail son correctas.
+**Exporta:** (script, no exporta)
+**Depende de:** `src/monitoring/emailAlert.js`, `src/shared/logger.js`, `dotenv/config`
+
+---
+
 ## src/shared/ (nuevos en Fase 6)
 
 ### marketHours.js
