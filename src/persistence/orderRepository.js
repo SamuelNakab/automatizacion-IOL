@@ -18,3 +18,17 @@ export async function getPending() {
 export async function getByAsset(assetId) {
   return prisma.order.findMany({ where: { assetId } });
 }
+
+export async function getSent() {
+  return prisma.order.findMany({ where: { status: 'sent' } });
+}
+
+export async function getOrphans(timeoutMinutes) {
+  const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+  return prisma.order.findMany({
+    where: {
+      status: { in: ['pending', 'sent'] },
+      createdAt: { lt: cutoff },
+    },
+  });
+}

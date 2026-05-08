@@ -4,6 +4,7 @@
   "description": "Trading bot algorítmico integrado con la API de InvertirOnline",
   "type": "module",
   "scripts": {
+    "start": "node scripts/startBot.js",
     "fetch-quotes": "node scripts/fetchQuotes.js",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -11,7 +12,10 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "axios": "^1.7.9",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
     "dotenv": "^16.4.7",
+    "nodemailer": "^8.0.7",
     "prisma": "^5.22.0",
     "winston": "^3.17.0"
   },

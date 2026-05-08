@@ -2,6 +2,102 @@
 
 ---
 
+## src/shared/marketHours.js
+
+### isMarketOpen()
+**Qué hace:** Devuelve `true` si la hora actual en America/Argentina/Buenos_Aires está dentro del horario de mercado (lunes-viernes, MARKET_OPEN_HOUR a MARKET_CLOSE_HOUR). No considera feriados.
+**Parámetros:** ninguno
+**Retorna:** `boolean`
+**Efectos secundarios:** ninguno (lee `new Date()` y `process.env`)
+**Llamada desde:** `src/orchestrator/orchestrator.js`
+
+### getNextOpenTime()
+**Qué hace:** Calcula el próximo momento en que el mercado abre. Si el horario de apertura de hoy todavía no llegó y es día hábil, retorna hoy a MARKET_OPEN_HOUR. De lo contrario avanza al siguiente lunes (o día hábil).
+**Parámetros:** ninguno
+**Retorna:** `Date` — próxima apertura en UTC
+**Efectos secundarios:** ninguno
+**Llamada desde:** `formatMarketStatus()`
+
+### formatMarketStatus()
+**Qué hace:** Retorna un string legible con el estado actual del mercado.
+**Parámetros:** ninguno
+**Retorna:** `'Mercado abierto'` o `'Mercado cerrado — próxima apertura: {fecha ARG}'`
+**Llamada desde:** `src/orchestrator/orchestrator.js`
+
+---
+
+## src/orchestrator/positionUpdater.js
+
+### confirmOrderFilled(order, filledQuantity, filledPrice)  *(async)*
+**Qué hace:** Confirma atómicamente que una orden fue ejecutada: actualiza la orden a 'filled', hace upsert de la posición (recalculando avgCost para BUY, reduciendo/eliminando para SELL), y actualiza bot_state (capitalAvailable, realizedPnl, unrealizedPnl, maxDrawdown, totalOperations). Si la transacción falla, loguea y relanza — requiere intervención manual.
+**Parámetros:** `order` — objeto Order completo; `filledQuantity` — número; `filledPrice` — número
+**Retorna:** `Promise<void>`
+**Efectos secundarios:** escribe en orders, positions y bot_state dentro de una transacción atómica
+**Llamada desde:** `src/orchestrator/orderPoller.js`
+
+### updateUnrealizedPnl(currentPrices)  *(async)*
+**Qué hace:** Recalcula el unrealizedPnl de cada posición abierta con los precios actuales de mercado y actualiza bot_state.unrealizedPnl con el total. Operación estimativa, no usa transacción.
+**Parámetros:** `currentPrices` — `Map<assetId, number>`
+**Retorna:** `Promise<void>`
+**Efectos secundarios:** escribe en positions y bot_state
+**Llamada desde:** `src/orchestrator/orchestrator.js`
+
+---
+
+## src/orchestrator/orderPoller.js
+
+### pollPendingOrders()  *(async)*
+**Qué hace:** Consulta el estado en IOL de todas las órdenes con status 'sent'. Si IOL las marca como filled, llama a `confirmOrderFilled`. Si las marca como cancelled/rejected, actualiza el status en DB.
+**Parámetros:** ninguno
+**Retorna:** `Promise<void>`
+**Efectos secundarios:** puede escribir en orders, positions y bot_state
+**Llamada desde:** `src/orchestrator/orchestrator.js` (via setInterval)
+
+### resolveOrphanOrders()  *(async)*
+**Qué hace:** Al arrancar el bot, detecta órdenes 'pending' o 'sent' más antiguas que ORPHAN_ORDER_TIMEOUT_MIN minutos. Las consulta en IOL (si tienen iolOrderId) o las marca como 'rejected' con reason 'orphan_no_iol_id'.
+**Parámetros:** ninguno
+**Retorna:** `Promise<void>`
+**Efectos secundarios:** puede escribir en orders y desencadenar actualizaciones de posiciones
+**Llamada desde:** `src/orchestrator/orchestrator.js` (al arrancar, antes del primer ciclo)
+
+---
+
+## src/orchestrator/orchestrator.js
+
+### start()  *(async)*
+**Qué hace:** Arranca el bot: resuelve órdenes huérfanas, ejecuta un ciclo inmediato, inicia el scheduler de ciclos (setInterval cada POLL_INTERVAL_MS) y el poller de órdenes (setInterval cada ORDER_POLL_INTERVAL_MS), registra handlers de SIGINT/SIGTERM.
+**Parámetros:** ninguno
+**Retorna:** `Promise<void>` (no resuelve hasta que se llama stop())
+**Llamada desde:** `scripts/startBot.js`
+
+### stop()  *(async)*
+**Qué hace:** Detiene el bot limpiamente: limpia los intervals, desconecta Prisma, y llama `process.exit(0)`.
+**Parámetros:** ninguno
+**Llamada desde:** handlers de SIGINT/SIGTERM registrados en `start()`
+
+### runCycle()  *(async)*
+**Qué hace:** Ciclo completo de un tick: verifica horario de mercado → cotizaciones + ticks → unrealizedPnl → strategy → botState.lastCycleAt → risk + execution por cada decisión. Un error no rompe el scheduler (finally resetea isRunning). Si ya hay un ciclo corriendo, lo saltea.
+**Parámetros:** ninguno
+**Retorna:** `Promise<void>`
+**Llamada desde:** `start()` (inmediato + scheduler)
+
+---
+
+## src/persistence/orderRepository.js (nuevas en Fase 6)
+
+### getSent()
+**Qué hace:** Retorna todas las órdenes con status 'sent' (enviadas a IOL, esperando confirmación).
+**Retorna:** array de objetos Order
+**Llamada desde:** `src/orchestrator/orderPoller.js`
+
+### getOrphans(timeoutMinutes)
+**Qué hace:** Retorna órdenes con status 'pending' o 'sent' cuyo `createdAt` es anterior al cutoff `(now - timeoutMinutes)`.
+**Parámetros:** `timeoutMinutes` — entero
+**Retorna:** array de objetos Order
+**Llamada desde:** `src/orchestrator/orderPoller.js`
+
+---
+
 ## src/auth/tokenManager.js
 
 ### getAuthHeaders()

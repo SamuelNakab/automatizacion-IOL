@@ -367,3 +367,87 @@ docs/funciones.md — descripción de cada función pública
 ## Estado actual del proyecto
 Ver PROGRESS.md para el detalle de cada fase completada.
 Leer PROGRESS.md antes de cualquier otra cosa al iniciar una sesión.
+
+## Fase 6 — Orchestrator
+
+### Responsabilidades del Orchestrator
+El Orchestrator es el único punto de entrada para la ejecución automática.
+Coordina el flujo completo sin contener lógica de negocio propia.
+
+### Ciclo principal
+1. Verificar que es horario de mercado (10:00-17:00 ARG, lunes a viernes)
+2. Obtener cotizaciones via marketDataService
+3. Persistir ticks via priceTickRepository
+4. Correr strategyEngine.runCycle()
+5. Para cada señal BUY o SELL:
+   a. riskManager.validate()
+   b. Si approved: executionEngine.execute()
+6. Actualizar bot_state.lastCycleAt
+7. Loguear resumen del ciclo
+
+### Prevención de solapamiento
+Si el ciclo anterior no terminó cuando arranca el siguiente,
+el nuevo ciclo se saltea con un log de advertencia.
+Usar un flag booleano isRunning en el Orchestrator.
+
+### Transacción al confirmar orden filled
+Cuando una orden pasa a filled, usar prisma.$transaction para
+actualizar simultáneamente orders, positions y bot_state.
+Si la transacción falla, loguear el error y NO reintentar automáticamente
+— requiere intervención manual.
+
+### Detección de órdenes huérfanas
+Al arrancar el Orchestrator, buscar órdenes con status 'pending' o 'sent'
+de más de ORPHAN_ORDER_TIMEOUT_MIN minutos.
+Para cada una, consultar estado real en IOL via iolOrderClient.getOrderStatus()
+y actualizar en DB.
+
+### Horario de mercado
+Timezone: America/Argentina/Buenos_Aires
+Días hábiles: lunes a viernes (no feriados — feriados se manejan en Fase 7)
+Apertura: MARKET_OPEN_HOUR (default 10)
+Cierre: MARKET_CLOSE_HOUR (default 17)
+Fuera de horario: acumular ticks, no ejecutar pipeline de señales.
+
+### Variables de entorno nuevas
+MARKET_OPEN_HOUR=10
+MARKET_CLOSE_HOUR=17
+ORPHAN_ORDER_TIMEOUT_MIN=30
+ORDER_POLL_INTERVAL_MS=60000
+
+## Fase 7A — Alertas por email con Nodemailer
+
+### Librería
+nodemailer con cuenta Gmail + app password.
+NUNCA usar la contraseña real de Gmail — solo app passwords.
+
+### Módulo principal
+src/monitoring/emailAlert.js — singleton análogo a telegramAlert.js.
+Si ALERT_EMAIL_FROM, ALERT_EMAIL_TO o ALERT_EMAIL_PASSWORD no están
+configurados: loguear advertencia y continuar sin enviar.
+isConfigured = false en ese caso.
+Un error de envío NUNCA detiene el bot — se loguea y se ignora.
+
+### Eventos que disparan alerta
+- BOT_START: resumen de configuración + link al dashboard si DASHBOARD_URL está seteado
+- ORDER_FILLED: símbolo, lado, cantidad, precio, PnL de la operación
+- DRAWDOWN_ALERT: drawdown actual vs límite configurado
+- CRITICAL_ERROR: mensaje del error + contexto del ciclo
+- BOT_STOP: motivo de detención
+
+### Formato de emails
+Subject descriptivo por tipo de evento.
+Body en HTML simple — sin dependencias de templates externos.
+Si DASHBOARD_URL está en .env, incluir botón/link al final de cada mail.
+
+### Integración con Orchestrator
+emailAlert se inyecta como dependencia en el constructor del Orchestrator.
+Los mismos puntos de llamada que estaban planificados para telegramAlert.
+
+### Variables requeridas
+ALERT_EMAIL_FROM=
+ALERT_EMAIL_TO=
+ALERT_EMAIL_PASSWORD=
+ALERT_ON_ORDER=true
+ALERT_DRAWDOWN_PCT=10
+DASHBOARD_URL=            # opcional, se incluye en los mails si está presente

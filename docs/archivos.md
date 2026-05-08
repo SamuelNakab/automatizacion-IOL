@@ -2,6 +2,47 @@
 
 ---
 
+## src/shared/ (nuevos en Fase 6)
+
+### marketHours.js
+**Propósito:** Módulo puro para verificar horario del mercado argentino usando `date-fns-tz`. Determina si es momento hábil para operar (lunes-viernes, entre MARKET_OPEN_HOUR y MARKET_CLOSE_HOUR en America/Argentina/Buenos_Aires).
+**Exporta:** `isMarketOpen()`, `getNextOpenTime()`, `formatMarketStatus()` (named exports)
+**Usado por:** `src/orchestrator/orchestrator.js`
+**Depende de:** `date-fns-tz`, `process.env`
+
+---
+
+## src/orchestrator/
+
+### positionUpdater.js
+**Propósito:** Actualiza positions y bot_state cuando una orden es confirmada como filled. Usa `prisma.$transaction` para garantizar atomicidad. También recalcula unrealizedPnl en tiempo real (sin transacción).
+**Exporta:** `confirmOrderFilled(order, filledQty, filledPrice)`, `updateUnrealizedPnl(currentPrices)` (named exports)
+**Usado por:** `src/orchestrator/orderPoller.js`, `src/orchestrator/orchestrator.js`
+**Depende de:** `src/persistence/prismaClient.js`, `src/persistence/positionRepository.js`, `src/persistence/botStateRepository.js`, `src/shared/logger.js`
+
+### orderPoller.js
+**Propósito:** Consulta el estado de órdenes enviadas a IOL. Resuelve órdenes en status 'sent' que ya fueron ejecutadas/canceladas. También detecta y resuelve órdenes huérfanas al arrancar el bot.
+**Exporta:** `pollPendingOrders()`, `resolveOrphanOrders()` (named exports)
+**Usado por:** `src/orchestrator/orchestrator.js`
+**Depende de:** `src/persistence/orderRepository.js`, `src/execution/iolOrderClient.js`, `src/orchestrator/positionUpdater.js`, `src/shared/logger.js`
+
+### orchestrator.js
+**Propósito:** Punto de entrada de la automatización. Coordina el ciclo completo: cotizaciones → strategy → risk → execution. Maneja el scheduler con `setInterval`, previene solapamiento de ciclos con `isRunning`, y gestiona el order poller. No contiene lógica de negocio propia.
+**Exporta:** `default class Orchestrator`
+**Usado por:** `scripts/startBot.js`
+**Depende de:** todas las capas (market-data, strategy, risk, execution, persistence, orchestrator sub-módulos)
+
+---
+
+## scripts/ (nuevos en Fase 6)
+
+### startBot.js
+**Propósito:** Punto de entrada principal del bot. Verifica DRY_RUN=true (aborta si no está), loguea la configuración activa (sin credenciales), instancia el Orchestrator con todas sus dependencias, y llama `orchestrator.start()`. Ejecutar con `npm start`.
+**Exporta:** (script, no exporta)
+**Depende de:** `src/orchestrator/orchestrator.js` y todas sus dependencias, `dotenv/config`
+
+---
+
 ## src/auth/
 
 ### tokenManager.js

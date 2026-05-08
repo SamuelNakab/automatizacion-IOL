@@ -173,3 +173,38 @@ Luego ejecutar `node scripts/runWithRisk.js` para ver BUY/SELL validados por rie
 ### Para ver órdenes dry_run en DB
 Acumular ≥50 ticks corriendo `fetchQuotes.js`, luego ejecutar `node scripts/runPipeline.js`.
 Con señales BUY/SELL reales (cuando hay suficientes datos), las órdenes aparecerán con status `'dry_run'`.
+
+---
+
+## Fase 6: Orchestrator — COMPLETA
+**Fecha:** 2026-05-08
+
+### Archivos creados / modificados
+| Archivo | Descripción |
+|---|---|
+| `src/shared/marketHours.js` | isMarketOpen(), getNextOpenTime(), formatMarketStatus() — usa date-fns-tz |
+| `src/orchestrator/positionUpdater.js` | confirmOrderFilled() (transacción atómica), updateUnrealizedPnl() |
+| `src/orchestrator/orderPoller.js` | pollPendingOrders(), resolveOrphanOrders() |
+| `src/orchestrator/orchestrator.js` | Clase Orchestrator: start(), stop(), runCycle() con isRunning guard |
+| `scripts/startBot.js` | Entry point del bot, verifica DRY_RUN, instancia todo y llama start() |
+| `src/persistence/orderRepository.js` | Agregados: getSent(), getOrphans(timeoutMin) |
+| `package.json` | Agregado: `"start": "node scripts/startBot.js"` |
+| `docs/archivos.md` / `docs/funciones.md` | Actualizados con nuevos módulos de Fase 6 |
+| `tests/unit/orchestrator/marketHours.test.js` | 6 tests de horario con vi.useFakeTimers() |
+| `tests/unit/orchestrator/positionUpdater.test.js` | 5 tests: BUY sin pos, BUY con pos (avgCost), SELL, SELL a 0, fallo de tx |
+| `tests/unit/orchestrator/orchestrator.test.js` | 3 tests: isRunning guard, mercado cerrado, error→isRunning=false |
+
+### Verificaciones completadas
+1. ✅ `npx vitest run` → **92/92 tests** (13 archivos de test)
+2. ✅ `npm start` → bot arranca, loguea config (sin credenciales), "Mercado cerrado — próxima apertura: 8/5/26, 11:00 a. m." en cada ciclo de 30s, order poller 0 órdenes, detenido limpiamente
+3. ✅ `DRY_RUN=true` en .env — `startBot.js` aborta si no está
+4. ✅ `myStrategy.js` intacto
+5. ✅ `docs/archivos.md` y `docs/funciones.md` actualizados
+
+### Comportamiento del Orchestrator
+- `npm start` → arranca el bot completo y automatizado
+- Cada 30s (POLL_INTERVAL_MS): ciclo completo si mercado abierto (Lu-Vi 11:00-17:00 ARG)
+- Fuera de horario: loguea "Mercado cerrado" y espera el próximo tick
+- Cada 60s (ORDER_POLL_INTERVAL_MS): consulta estado de órdenes 'sent' en IOL
+- Al arrancar: resuelve órdenes huérfanas (> ORPHAN_ORDER_TIMEOUT_MIN minutos)
+- SIGINT/SIGTERM → detención limpia con "Bot detenido limpiamente."
