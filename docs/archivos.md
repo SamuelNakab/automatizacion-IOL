@@ -2,6 +2,54 @@
 
 ---
 
+## src/backtest/ (Fase Nueva A)
+
+### indicators.js
+**Propósito:** Funciones puras de cálculo técnico para el backtesting. Copia standalone de las funciones de `src/strategy/indicators.js`, más `atr()`. Sin dependencias externas ni efectos secundarios.
+**Exporta:** `sma`, `ema`, `rsi`, `bollingerBands`, `atr` (named exports)
+**Usado por:** `src/backtest/algorithms.js`
+**Depende de:** (ninguno)
+
+### algorithms.js
+**Propósito:** Los 5 algoritmos de backtesting como funciones puras. Cada uno recibe `bars[]` y `params{}`, retorna `signals[]` con acciones BUY/SELL. Garantiza que no haya dos BUY ni dos SELL consecutivos.
+**Exporta:** `rsiMeanReversion`, `momentum`, `bollingerReversion`, `maCrossover`, `atrBreakout` (named exports)
+**Usado por:** `scripts/runBacktest.js`, `src/backtest/backtestV2Runner.js`
+**Depende de:** `src/backtest/indicators.js`
+
+### simulator.js
+**Propósito:** Simula el PnL de un array de señales sobre datos históricos reales. Usa 95% del capital disponible por operación. Cierra posición abierta al final al último precio.
+**Exporta:** `simulate(signals, bars, initialCapital)`, `calcMetrics(trades, initialCapital, finalCapital)` (named exports)
+**Usado por:** `scripts/runBacktest.js`, `src/backtest/backtestV2Runner.js`
+**Depende de:** (ninguno)
+
+### dollarBenchmark.js
+**Propósito:** Obtiene la apreciación del dólar MEP/oficial en el período de backtesting. Cascada de 3 fuentes: GD30 en DB → API BCRA → fallback hardcodeado (~1043%). Nunca lanza excepción — siempre retorna un resultado.
+**Exporta:** `getDollarAppreciation(fromDate, toDate)` (named export, async)
+**Usado por:** `src/backtest/backtestV2Runner.js`
+**Depende de:** `axios`, `src/persistence/prismaClient.js`, `src/shared/logger.js`
+
+### backtestV2Runner.js
+**Propósito:** Lógica del backtesting V2. Aplica dos filtros de calidad: mínimo MIN_TRADES=8 operaciones y retorno superior al dólar (alpha > 0). Exporta funciones puras `evaluateValidity`, `buildConsolidatedTable` y `declareWinner` para ser testeables independientemente.
+**Exporta:** `runBacktestV2()`, `buildConsolidatedTable(results)`, `declareWinner(consolidatedResults)`, `evaluateValidity(totalTrades, totalReturn, dollarAppreciation)`, `ALGORITHMS`, `BACKTEST_FROM_DATE`, `MIN_TRADES` (named exports)
+**Usado por:** `scripts/runBacktestV2.js`
+**Depende de:** `src/persistence/assetRepository.js`, `src/persistence/priceHistoryRepository.js`, `src/backtest/dollarBenchmark.js`, `src/backtest/algorithms.js`, `src/backtest/simulator.js`, `src/shared/logger.js`
+
+---
+
+## scripts/ (Fase Nueva A)
+
+### runBacktest.js
+**Propósito:** Script standalone de backtesting V1. Lee price_history de todos los activos activos, corre los 5 algoritmos con parámetros default, muestra tabla comparativa en consola y genera `docs/backtest_results.md`. No modifica DB ni llama a IOL.
+**Exporta:** (script, no exporta)
+**Depende de:** `src/backtest/algorithms.js`, `src/backtest/simulator.js`, `src/persistence/assetRepository.js`, `src/persistence/priceHistoryRepository.js`, `src/persistence/prismaClient.js`, `dotenv/config`
+
+### runBacktestV2.js
+**Propósito:** Script standalone de backtesting V2. Extiende V1 con benchmark de dólar y filtros: mínimo 8 trades y superar la apreciación del dólar. Muestra columna "vs Dólar" en tablas y lista algoritmos descalificados. Genera `docs/backtest_v2_results.md`.
+**Exporta:** (script, no exporta)
+**Depende de:** `src/backtest/backtestV2Runner.js`, `src/persistence/prismaClient.js`, `dotenv/config`
+
+---
+
 ## src/monitoring/ (Fase 7A)
 
 ### emailAlert.js

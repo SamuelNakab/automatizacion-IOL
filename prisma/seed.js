@@ -8,7 +8,7 @@ async function main() {
     const result = await prisma.asset.upsert({
       where: { symbol_market: { symbol: asset.symbol, market: asset.market } },
       create: { symbol: asset.symbol, market: asset.market, type: asset.type },
-      update: { type: asset.type },
+      update: { type: asset.type, active: true },
     });
     logger.info('Asset upserted', { id: result.id, symbol: result.symbol, market: result.market });
   }

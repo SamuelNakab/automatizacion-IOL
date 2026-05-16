@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('node-cron', () => ({
+  default: { schedule: vi.fn(() => ({ stop: vi.fn() })) },
+}))
+vi.mock('../../../src/orchestrator/dailyUpdater.js', () => ({
+  runDailyUpdate: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('../../../src/shared/marketHours.js', () => ({
   isMarketOpen:       vi.fn(),
   formatMarketStatus: vi.fn(() => 'Mercado cerrado — próxima apertura: test'),

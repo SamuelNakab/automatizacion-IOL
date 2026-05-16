@@ -1,4 +1,6 @@
+import cron                     from 'node-cron'
 import { isMarketOpen, formatMarketStatus } from '../shared/marketHours.js'
+import { runDailyUpdate }       from './dailyUpdater.js'
 import * as assetRepository    from '../persistence/assetRepository.js'
 import * as priceTickRepository from '../persistence/priceTickRepository.js'
 import * as positionRepository  from '../persistence/positionRepository.js'
@@ -26,6 +28,7 @@ export default class Orchestrator {
     this.isRunning      = false
     this.cycleInterval  = null
     this.pollerInterval = null
+    this.dailyCronJob   = null
   }
 
   async start() {
@@ -48,6 +51,15 @@ export default class Orchestrator {
     this.cycleInterval  = setInterval(() => this.runCycle(),              POLL_INTERVAL_MS())
     this.pollerInterval = setInterval(() => this.orderPoller.pollPendingOrders(), ORDER_POLL_INTERVAL_MS())
 
+    // Cron job diario a las 18:00 ARG (21:00 UTC, Argentina es UTC-3)
+    this.dailyCronJob = cron.schedule('0 21 * * 1-5', async () => {
+      logger.info('Iniciando daily update de price_history')
+      await runDailyUpdate()
+    }, {
+      timezone: 'America/Argentina/Buenos_Aires',
+    })
+    logger.info('Daily update programado para las 18:00 ARG días hábiles')
+
     process.on('SIGINT',  () => this.stop('SIGINT'))
     process.on('SIGTERM', () => this.stop('SIGTERM'))
 
@@ -59,6 +71,7 @@ export default class Orchestrator {
     await this.emailAlert.sendAlert('BOT_STOP', { reason })
     if (this.cycleInterval)  clearInterval(this.cycleInterval)
     if (this.pollerInterval) clearInterval(this.pollerInterval)
+    if (this.dailyCronJob)   this.dailyCronJob.stop()
     await prisma.$disconnect()
     logger.info('Bot detenido limpiamente.')
     process.exit(0)

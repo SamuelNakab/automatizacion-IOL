@@ -250,3 +250,61 @@ ALERT_ON_ORDER=true   # Activar alertas por orden ejecutada
 ALERT_DRAWDOWN_PCT=10 # Umbral de drawdown para alerta (%)
 DASHBOARD_URL=        # Opcional — se incluye en todos los mails
 ```
+
+---
+
+## Fase Nueva A — Backtesting V1 — COMPLETA
+**Fecha:** 2026-05-16
+
+### Archivos creados
+| Archivo | Descripción |
+|---|---|
+| `src/backtest/indicators.js` | Funciones puras: sma, ema, rsi, bollingerBands, atr (standalone, sin deps cruzadas) |
+| `src/backtest/algorithms.js` | 5 algoritmos puros: rsiMeanReversion, momentum, bollingerReversion, maCrossover, atrBreakout |
+| `src/backtest/simulator.js` | simulate() + calcMetrics(): simula PnL sobre señales y calcula métricas |
+| `scripts/runBacktest.js` | Script standalone: corre los 5 algoritmos sobre price_history, imprime tabla, elige ganador |
+| `scripts/backfill.js` | Actualizado para 6 activos (GGAL, BBAR, PAMP, TGSU2, TRAN, YPFD) |
+| `src/shared/assets.js` | Reducido a 6 acciones locales con historial en IOL |
+| `docs/backtest_results.md` | Resultados del backtest V1 |
+| `tests/unit/backtest/algorithms.test.js` | 6 tests de los 5 algoritmos |
+| `tests/unit/backtest/simulator.test.js` | 5 tests de simulate() y calcMetrics() |
+
+### Verificaciones completadas
+1. ✅ `npx vitest run` → **114/114 tests** (17 archivos de test)
+2. ✅ `node scripts/runBacktest.js` → tabla completa por activo y consolidada
+3. ✅ Ganador V1: **RSI Mean Reversion** (Sharpe 2.376, WinRate 91.67%, Drawdown -1.5%)
+4. ✅ `docs/backtest_results.md` generado
+5. ✅ `myStrategy.js` intacto
+6. ✅ `DRY_RUN=true`
+
+### Activos definitivos (6)
+GGAL, BBAR, PAMP, TGSU2, TRAN, YPFD — todos acciones del mercado local bCBA con 1218-1224 barras históricas desde 2021.
+
+---
+
+## Backtesting V2 — COMPLETA
+**Fecha:** 2026-05-16
+
+### Archivos creados
+| Archivo | Descripción |
+|---|---|
+| `src/backtest/dollarBenchmark.js` | Obtiene apreciación del dólar en cascada: GD30 DB → BCRA API → fallback hardcodeado |
+| `src/backtest/backtestV2Runner.js` | Lógica V2: filtros MIN_TRADES=8 + superar dólar. evaluateValidity(), buildConsolidatedTable(), declareWinner() |
+| `scripts/runBacktestV2.js` | Script ejecutable con columna "vs Dólar" y algoritmos descalificados |
+| `docs/backtest_v2_results.md` | Resultados del backtest V2 |
+| `tests/unit/backtest/dollarBenchmark.test.js` | 4 tests: BCRA ok, BCRA falla, respuesta vacía, appreciation siempre número |
+| `tests/unit/backtest/backtestV2Runner.test.js` | 8 tests: evaluateValidity, declareWinner, buildConsolidatedTable, integración |
+
+### Verificaciones completadas
+1. ✅ `npx vitest run` → **126/126 tests** (19 archivos de test)
+2. ✅ `node scripts/runBacktestV2.js` → benchmark dólar fallback +1042.86%, tablas con columna "vs Dólar"
+3. ✅ Ganador V2: **Momentum** (único que supera el dólar en ≥3/6 activos con ≥8 trades)
+4. ✅ RSI/Bollinger/ATR descalificados (no superan el dólar con datos reales 2022-2026)
+5. ✅ `docs/backtest_v2_results.md` generado
+6. ✅ `myStrategy.js` intacto
+7. ✅ `DRY_RUN=true`
+
+### Resultado del benchmark
+- Benchmark: dólar fallback +1042.86% (105 → 1200 ARS/USD, 2022-2026)
+- Solo Momentum y MA Crossover superan el dólar en activos específicos
+- Ganador con filtros estrictos: **Momentum** (Sharpe 0.52, Return +1452%, vs Dólar +410%)

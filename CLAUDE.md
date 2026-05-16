@@ -1,4 +1,4 @@
-# CLAUDE.md — Trading Bot IOL
+markdown# CLAUDE.md — Trading Bot IOL
 
 ## Contexto del proyecto
 Sistema de trading algorítmico multi-activo integrado con la API de InvertirOnline (IOL).
@@ -21,8 +21,8 @@ strategy/       # Strategy Engine (señales por activo)
 risk/           # Risk Manager (validación de decisiones)
 execution/      # Execution Engine
 persistence/    # Repositorios de acceso a DB
-orchestrator/   # Scheduler y coordinación del ciclo — Fase 6
-monitoring/     # Métricas, alertas, dashboard — Fase 7
+orchestrator/   # Scheduler y coordinación del ciclo
+monitoring/     # Métricas, alertas, dashboard
 shared/         # Types, constantes, utilidades comunes
 prisma/
 schema.prisma
@@ -83,18 +83,35 @@ CERO llamadas a POST /api/v2/operar/Comprar o POST /api/v2/operar/Vender
 mientras DRY_RUN=true.
 
 ### Estrategia personalizada
-src/strategy/strategies/myStrategy.js es el archivo donde el usuario
-escribirá su lógica de trading. El método evaluate() actualmente retorna
-SIGNALS.HOLD y debe mantenerse así hasta que el usuario lo modifique
-explícitamente. NUNCA modificar myStrategy.js salvo que el usuario lo pida.
+src/strategy/strategies/myStrategy.js es el archivo donde se implementará
+la estrategia ganadora del backtesting. El método evaluate() actualmente
+retorna SIGNALS.HOLD y debe mantenerse así hasta la Fase Nueva B.
+NUNCA modificar myStrategy.js salvo instrucción explícita.
 
-## Activos iniciales
-```javascript
-const ASSETS = [
-  { symbol: 'GGAL', market: 'bCBA', type: 'accion' },
-  { symbol: 'YPFD', market: 'bCBA', type: 'accion' },
-  { symbol: 'GD35', market: 'bCBA', type: 'bono'   },
+### Lógica de ejecución por tipo de señal
+Cuando la estrategia esté implementada (Fase Nueva B):
+- Señal SELL → el bot ejecuta la venta automáticamente via Execution Engine
+- Señal BUY  → el bot NO ejecuta. Envía alerta por email al usuario y registra
+  la decisión como 'pending_manual'. El usuario decide si comprar según fondos disponibles.
+
+## Lista de activos operados
+```javascriptexport const ASSETS = [
+{ symbol: 'GGAL',  market: 'bCBA', type: 'accion' },
+{ symbol: 'BBAR',  market: 'bCBA', type: 'accion' },
+{ symbol: 'PAMP',  market: 'bCBA', type: 'accion' },
+{ symbol: 'TGSU2', market: 'bCBA', type: 'accion' },
+{ symbol: 'TRAN',  market: 'bCBA', type: 'accion' },
+{ symbol: 'YPFD',  market: 'bCBA', type: 'accion' },
+{ symbol: 'ALUA',  market: 'bCBA', type: 'accion' },
+{ symbol: 'TXAR',  market: 'bCBA', type: 'accion' },
+{ symbol: 'MIRG',  market: 'bCBA', type: 'accion' },
+{ symbol: 'CRES',  market: 'bCBA', type: 'accion' },
 ]
+
+---
+```
+CEDEARs y bonos removidos hasta contar con fuente de histórico alternativa.
+Todos los activos son acciones locales del panel BYMA con histórico disponible en IOL.
 ```
 
 ## Endpoints clave de IOL
@@ -182,18 +199,18 @@ model Decision {
 }
 
 model Order {
-  id          Int      @id @default(autoincrement())
-  decisionId  Int?     @map("decision_id")
-  assetId     Int      @map("asset_id")
-  iolOrderId  String?  @map("iol_order_id")
+  id          Int       @id @default(autoincrement())
+  decisionId  Int?      @map("decision_id")
+  assetId     Int       @map("asset_id")
+  iolOrderId  String?   @map("iol_order_id")
   side        String
   quantity    Decimal
   price       Decimal
-  status      String   @default("pending")
-  iolResponse Json?    @map("iol_response")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  asset       Asset    @relation(fields: [assetId], references: [id])
+  status      String    @default("pending")
+  iolResponse Json?     @map("iol_response")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  asset       Asset     @relation(fields: [assetId], references: [id])
   decision    Decision? @relation(fields: [decisionId], references: [id])
   @@map("orders")
 }
@@ -231,14 +248,14 @@ model BotState {
 Cada tabla tiene su propio archivo en src/persistence/.
 Los módulos de negocio nunca importan PrismaClient directamente.
 
-- prismaClient.js          — singleton del PrismaClient
-- assetRepository.js       — findAll, findBySymbolAndMarket, upsert
-- priceHistoryRepository.js — bulkUpsert, getRange, getLatest, count
-- priceTickRepository.js   — insert, getLatest
-- decisionRepository.js    — insert, getRecent
-- orderRepository.js       — insert, updateStatus, getPending, getByAsset
-- positionRepository.js    — upsert, findByAsset, findAll
-- botStateRepository.js    — get, update
+- prismaClient.js            — singleton del PrismaClient
+- assetRepository.js         — findAll, findBySymbolAndMarket, upsert
+- priceHistoryRepository.js  — bulkUpsert, getRange, getLatest, count
+- priceTickRepository.js     — insert, getLatest
+- decisionRepository.js      — insert, getRecent
+- orderRepository.js         — insert, updateStatus, getPending, getByAsset
+- positionRepository.js      — upsert, findByAsset, findAll
+- botStateRepository.js      — get, update
 
 ## Variables de entorno requeridas
 IOL_USERNAME=              # Email de cuenta IOL
@@ -255,11 +272,26 @@ RISK_MAX_EXPOSURE_PER_ASSET_PCT=20
 RISK_MAX_TOTAL_EXPOSURE_PCT=60
 RISK_MAX_DRAWDOWN_PCT=15
 RISK_MIN_OPERATION_INTERVAL_MINUTES=60
+Mercado
+MARKET_OPEN_HOUR=10
+MARKET_CLOSE_HOUR=17
+ORPHAN_ORDER_TIMEOUT_MIN=30
+ORDER_POLL_INTERVAL_MS=60000
+Monitoring HTTP
+MONITORING_PORT=3001
+Alertas email
+ALERT_EMAIL_FROM=
+ALERT_EMAIL_TO=
+ALERT_EMAIL_PASSWORD=
+ALERT_ON_ORDER=true
+ALERT_DRAWDOWN_PCT=10
+Dashboard
+DASHBOARD_URL=
 
 ## Fase 2 — Base de datos
 
 ### Seed inicial
-prisma/seed.js inserta los 3 activos y crea la fila inicial de bot_state
+prisma/seed.js inserta los activos y crea la fila inicial de bot_state
 con INITIAL_CAPITAL del .env. Correr con: npx prisma db seed
 
 ### Repositorios
@@ -273,9 +305,9 @@ Cada estrategia extiende BaseStrategy e implementa evaluate().
 Una instancia por activo. strategyEngine.runCycle() coordina todo.
 
 ### Señales válidas
-- 'BUY'  → evaluada por el Risk Manager
-- 'SELL' → evaluada por el Risk Manager
-- 'HOLD' → no se persiste, no se evalúa
+- 'BUY'  → evaluada por el Risk Manager. En Fase Nueva B: dispara email, no ejecuta.
+- 'SELL' → evaluada por el Risk Manager. En Fase Nueva B: se ejecuta automáticamente.
+- 'HOLD' → no se persiste, no se evalúa.
 
 ### Indicadores disponibles en indicators.js
 - sma(prices, period)
@@ -287,7 +319,8 @@ Todas retornan null si no hay datos suficientes.
 
 ### Archivo reservado para estrategia personalizada
 src/strategy/strategies/myStrategy.js — evaluate() retorna SIGNALS.HOLD.
-NUNCA modificar este archivo salvo instrucción explícita del usuario.
+Se implementará en Fase Nueva B con el algoritmo ganador del backtesting.
+NUNCA modificar este archivo salvo instrucción explícita.
 
 ### STRATEGY_MAP en strategyEngine.js
 Define qué estrategia usa cada activo.
@@ -300,10 +333,15 @@ price_history → OHLCV diario, cargado via backfill, para modelos y backtesting
 price_ticks   → cotizaciones en tiempo real del polling, para señales inmediatas
 
 ### Script de backfill
-scripts/backfill.js — correr UNA SOLA VEZ.
+scripts/backfill.js — idempotente (upsert por fecha), se puede correr N veces.
 Carga hasta 5 años de histórico diario por activo via IOL.
 Usa bulkUpsert en chunks de 100 para evitar timeouts de Prisma.
-Resultado actual: GGAL 1217 barras, YPFD 1217 barras, GD35 0 barras.
+
+### Job diario de actualización
+src/orchestrator/dailyUpdater.js — corre a las 18:00 ARG días hábiles.
+Pide últimos 7 días a IOL para cada activo y hace upsert en price_history.
+Se activa via node-cron en el Orchestrator.
+También ejecutable manualmente: node scripts/runDailyUpdate.js
 
 ### Risk Manager
 src/risk/riskManager.js — clase pura, sin DB, sin IOL.
@@ -328,7 +366,7 @@ Si DRY_RUN=true → loguea la orden como "SIMULADA [DRY_RUN]" y retorna.
 iolOrderClient.js NUNCA es llamado con DRY_RUN=true.
 
 ### Módulos del Execution Engine
-src/execution/orderBuilder.js     — construye el JSON de orden para IOL (puro, sin efectos)
+src/execution/orderBuilder.js     — construye el JSON de orden para IOL (puro)
 src/execution/iolOrderClient.js   — wrapper Axios para endpoints de órdenes
 src/execution/executionEngine.js  — coordina el ciclo completo de una orden
 
@@ -338,17 +376,14 @@ approvedDecision = { assetId, signal, priceAtDecision, quantity, asset: { symbol
 Retorna: { success: bool, orderId, status, reason }
 
 ### Estados de orden
-pending   → creada en DB, no enviada
-sent      → enviada a IOL
-filled    → ejecutada por el mercado
-partial   → ejecutada parcialmente
-cancelled → cancelada
-rejected  → rechazada por IOL
-dry_run   → simulada por DRY_RUN=true
-
-### Actualización de posiciones y bot_state
-La actualización después de una orden filled es responsabilidad
-del Orchestrator (Fase 6), no del Execution Engine.
+pending          → creada en DB, no enviada
+sent             → enviada a IOL
+filled           → ejecutada por el mercado
+partial          → ejecutada parcialmente
+cancelled        → cancelada
+rejected         → rechazada por IOL
+dry_run          → simulada por DRY_RUN=true
+pending_manual   → BUY que requiere acción manual del usuario (Fase Nueva B)
 
 ### Estructura de orden para IOL
 {
@@ -364,18 +399,15 @@ del Orchestrator (Fase 6), no del Execution Engine.
 docs/archivos.md  — descripción de cada archivo .js del proyecto
 docs/funciones.md — descripción de cada función pública
 
-## Estado actual del proyecto
-Ver PROGRESS.md para el detalle de cada fase completada.
-Leer PROGRESS.md antes de cualquier otra cosa al iniciar una sesión.
-
 ## Fase 6 — Orchestrator
 
-### Responsabilidades del Orchestrator
+### Responsabilidades
 El Orchestrator es el único punto de entrada para la ejecución automática.
 Coordina el flujo completo sin contener lógica de negocio propia.
+Tres schedulers: ciclo principal, order poller, daily updater (cron 18:00 ARG).
 
 ### Ciclo principal
-1. Verificar que es horario de mercado (10:00-17:00 ARG, lunes a viernes)
+1. Verificar horario de mercado (10:00-17:00 ARG, lunes a viernes)
 2. Obtener cotizaciones via marketDataService
 3. Persistir ticks via priceTickRepository
 4. Correr strategyEngine.runCycle()
@@ -386,68 +418,133 @@ Coordina el flujo completo sin contener lógica de negocio propia.
 7. Loguear resumen del ciclo
 
 ### Prevención de solapamiento
-Si el ciclo anterior no terminó cuando arranca el siguiente,
-el nuevo ciclo se saltea con un log de advertencia.
-Usar un flag booleano isRunning en el Orchestrator.
+Flag booleano isRunning. Si el ciclo anterior no terminó, el nuevo se saltea.
 
 ### Transacción al confirmar orden filled
-Cuando una orden pasa a filled, usar prisma.$transaction para
-actualizar simultáneamente orders, positions y bot_state.
-Si la transacción falla, loguear el error y NO reintentar automáticamente
-— requiere intervención manual.
+prisma.$transaction actualiza simultáneamente orders, positions y bot_state.
+Si falla: loguear y NO reintentar automáticamente.
 
 ### Detección de órdenes huérfanas
-Al arrancar el Orchestrator, buscar órdenes con status 'pending' o 'sent'
-de más de ORPHAN_ORDER_TIMEOUT_MIN minutos.
-Para cada una, consultar estado real en IOL via iolOrderClient.getOrderStatus()
-y actualizar en DB.
+Al arrancar: buscar órdenes pending/sent de más de ORPHAN_ORDER_TIMEOUT_MIN.
+Consultar estado real en IOL y actualizar en DB.
 
 ### Horario de mercado
 Timezone: America/Argentina/Buenos_Aires
-Días hábiles: lunes a viernes (no feriados — feriados se manejan en Fase 7)
 Apertura: MARKET_OPEN_HOUR (default 10)
 Cierre: MARKET_CLOSE_HOUR (default 17)
 Fuera de horario: acumular ticks, no ejecutar pipeline de señales.
 
-### Variables de entorno nuevas
-MARKET_OPEN_HOUR=10
-MARKET_CLOSE_HOUR=17
-ORPHAN_ORDER_TIMEOUT_MIN=30
-ORDER_POLL_INTERVAL_MS=60000
-
 ## Fase 7A — Alertas por email con Nodemailer
 
-### Librería
-nodemailer con cuenta Gmail + app password.
-NUNCA usar la contraseña real de Gmail — solo app passwords.
-
 ### Módulo principal
-src/monitoring/emailAlert.js — singleton análogo a telegramAlert.js.
-Si ALERT_EMAIL_FROM, ALERT_EMAIL_TO o ALERT_EMAIL_PASSWORD no están
-configurados: loguear advertencia y continuar sin enviar.
-isConfigured = false en ese caso.
-Un error de envío NUNCA detiene el bot — se loguea y se ignora.
+src/monitoring/emailAlert.js — singleton Nodemailer con Gmail + app password.
+Si faltan variables: isConfigured=false, advertencia en log, bot sigue.
+Un error de envío NUNCA detiene el bot.
 
 ### Eventos que disparan alerta
-- BOT_START: resumen de configuración + link al dashboard si DASHBOARD_URL está seteado
-- ORDER_FILLED: símbolo, lado, cantidad, precio, PnL de la operación
-- DRAWDOWN_ALERT: drawdown actual vs límite configurado
-- CRITICAL_ERROR: mensaje del error + contexto del ciclo
+- BOT_START: configuración activa + link al dashboard
+- ORDER_FILLED: símbolo, lado, cantidad, precio, PnL
+- DRAWDOWN_ALERT: drawdown actual vs límite
+- CRITICAL_ERROR: mensaje + contexto
 - BOT_STOP: motivo de detención
-
-### Formato de emails
-Subject descriptivo por tipo de evento.
-Body en HTML simple — sin dependencias de templates externos.
-Si DASHBOARD_URL está en .env, incluir botón/link al final de cada mail.
+- BUY_MANUAL_REQUIRED (Fase Nueva B): aviso de oportunidad de compra
+  con símbolo, precio sugerido, cantidad sugerida, y link al dashboard
 
 ### Integración con Orchestrator
-emailAlert se inyecta como dependencia en el constructor del Orchestrator.
-Los mismos puntos de llamada que estaban planificados para telegramAlert.
+emailAlert inyectado como dependencia en el constructor del Orchestrator.
 
-### Variables requeridas
-ALERT_EMAIL_FROM=
-ALERT_EMAIL_TO=
-ALERT_EMAIL_PASSWORD=
-ALERT_ON_ORDER=true
-ALERT_DRAWDOWN_PCT=10
-DASHBOARD_URL=            # opcional, se incluye en los mails si está presente
+## Preparación Fase Nueva A — Activos y datos históricos
+
+### Activos activos en el sistema
+16 activos definidos en src/shared/assets.js (ver sección "Lista de activos").
+GGAL marcado como active=false en DB — no se procesa.
+
+### Job diario
+src/orchestrator/dailyUpdater.js actualiza price_history a las 18:00 ARG.
+Ejecutable manualmente: node scripts/runDailyUpdate.js
+
+### Backfill
+scripts/backfill.js es idempotente. Correrlo cada vez que se agreguen activos nuevos.
+
+## Fase Nueva A — Backtesting (PENDIENTE)
+
+### Objetivo
+Comparar los 5 algoritmos sobre los datos históricos de todos los activos
+y determinar el ganador para implementar en myStrategy.js.
+
+### Los 5 algoritmos a evaluar
+1. RSI Mean Reversion — RSI + z-score
+2. Momentum / Relative Strength — retorno acumulado en ventana temporal
+3. Bollinger Bands Mean Reversion — precio vs bandas superior/inferior
+4. Moving Average Crossover — cruce de medias móviles corta y larga
+5. Volatility Breakout (ATR) — ruptura de rango con aumento de volatilidad
+
+### Métricas de evaluación por algoritmo
+- Retorno total %
+- Win rate (operaciones ganadoras / total)
+- Máximo drawdown
+- Cantidad de operaciones generadas
+- Sharpe ratio simplificado
+
+### Output esperado
+Tabla comparativa de los 5 algoritmos por activo y consolidada.
+Declaración del algoritmo ganador con justificación numérica.
+El usuario revisa y confirma el ganador antes de implementarlo.
+
+### Script
+scripts/runBacktest.js — standalone, no modifica DB, solo lee price_history.
+Lee datos de todos los activos con barras suficientes (mínimo 50).
+Imprime resultados en consola y genera docs/backtest_results.md.
+
+## Fase Nueva B — Implementar algoritmo ganador (PENDIENTE)
+
+### Qué se hace
+1. Implementar el algoritmo ganador en src/strategy/strategies/myStrategy.js
+2. Modificar executionEngine.js para que BUY dispare email en lugar de ejecutar
+3. Agregar estado 'pending_manual' en el flujo de órdenes
+4. Agregar alerta 'BUY_MANUAL_REQUIRED' en emailAlert.js
+
+### Lógica de ejecución
+SELL → executionEngine.execute() → orden real a IOL (con DRY_RUN=false en Fase 8)
+BUY  → emailAlert.sendAlert('BUY_MANUAL_REQUIRED') → orden registrada como 'pending_manual'
+       El usuario decide si ejecuta la compra según fondos disponibles.
+
+## Fase 7C — Deploy en Railway (PENDIENTE)
+Bot corriendo 24/7 en servidor remoto.
+Variables de entorno configuradas en Railway dashboard.
+Restart automático ante fallos.
+
+## Fase 8 — Producción real (PENDIENTE)
+DRY_RUN=false — NUNCA cambiar antes de esta fase.
+Capital mínimo real.
+Monitoreo manual las primeras semanas.
+BotState actualizado con capital real antes de arrancar.
+
+## Estado del proyecto
+Ver PROGRESS.md para el detalle de cada fase completada.
+Leer PROGRESS.md antes de cualquier otra cosa al iniciar una sesión.
+
+## Backtesting v2 — Con filtros de calidad (PENDIENTE correr)
+
+### Cambios respecto al backtesting v1
+1. Fecha de inicio: 01/01/2022 (excluye pandemia 2020-2021)
+2. Mínimo de operaciones: 8 trades completos por simulación
+   Si un algoritmo genera menos de 8 trades en el período → descartado
+3. Benchmark de dólar MEP: una estrategia debe superar la apreciación
+   del dólar MEP en el mismo período para ser considerada válida
+4. Benchmark calculado con el ticker GD30 (Global 2030) que IOL
+   sí tiene histórico — precio en pesos / precio en dólares
+   Si no está disponible, usar tipo de cambio oficial desde BCRA
+   como piso mínimo del benchmark
+
+### Métricas adicionales v2
+- Retorno vs dólar: retornoEstrategia% - apreciacionDolar%
+  Si negativo: la estrategia no le ganó al dólar → marcada como inválida
+- Alpha: exceso de retorno sobre el benchmark dólar
+- Solo algoritmos con alpha > 0 Y trades >= 8 son candidatos al ganador
+
+### Script
+scripts/runBacktestV2.js — reemplaza a runBacktest.js para la decisión final
+Lee price_history desde 2022-01-01 en adelante para cada activo.
+Obtiene cotización del dólar MEP del período via IOL o BCRA API.
+Genera docs/backtest_v2_results.md con resultados filtrados.
