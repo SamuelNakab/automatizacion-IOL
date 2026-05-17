@@ -8,15 +8,16 @@ import * as orderRepository     from '../persistence/orderRepository.js'
 import * as botStateRepository  from '../persistence/botStateRepository.js'
 import prisma                   from '../persistence/prismaClient.js'
 import logger                   from '../shared/logger.js'
+import { SIGNALS }              from '../shared/constants.js'
 
 const POLL_INTERVAL_MS       = () => parseInt(process.env.POLL_INTERVAL_MS       ?? '30000')
 const ORDER_POLL_INTERVAL_MS = () => parseInt(process.env.ORDER_POLL_INTERVAL_MS ?? '60000')
 
-// No-op por defecto — si no se inyecta emailAlert los test existentes no se rompen
+// No-op por defecto — si no se inyectan los alerts, los tests existentes no se rompen
 const noOpAlert = { sendAlert: async () => {} }
 
 export default class Orchestrator {
-  constructor({ marketDataService, strategyEngine, riskManager, executionEngine, positionUpdater, orderPoller, emailAlert = noOpAlert }) {
+  constructor({ marketDataService, strategyEngine, riskManager, executionEngine, positionUpdater, orderPoller, emailAlert = noOpAlert, whatsappAlert = noOpAlert }) {
     this.marketDataService = marketDataService
     this.strategyEngine    = strategyEngine
     this.riskManager       = riskManager
@@ -24,6 +25,7 @@ export default class Orchestrator {
     this.positionUpdater   = positionUpdater
     this.orderPoller       = orderPoller
     this.emailAlert        = emailAlert
+    this.whatsappAlert     = whatsappAlert
 
     this.isRunning      = false
     this.cycleInterval  = null
@@ -117,9 +119,8 @@ export default class Orchestrator {
       await botStateRepository.update({ lastCycleAt: new Date() })
 
       // 5 — Validar y ejecutar cada decisión
-      let approved        = 0
-      let executed        = 0
-      const executedItems = []
+      let approved = 0
+      let executed = 0
 
       for (const decision of decisions) {
         const botState  = await botStateRepository.get()
@@ -138,30 +139,67 @@ export default class Orchestrator {
 
         const riskResult = this.riskManager.validate(decision, botState, positions, lastOrderByAsset)
 
-        if (riskResult.approved) {
-          approved++
-          const execResult = await this.executionEngine.execute({ ...decision, quantity: riskResult.quantity })
-          if (execResult.success) {
-            executed++
-            executedItems.push({ decision, quantity: riskResult.quantity })
-          }
-        } else {
+        if (!riskResult.approved) {
           logger.info('Decisión rechazada por Risk Manager', {
             symbol: decision.asset?.symbol, reason: riskResult.reason,
           })
+          continue
         }
-      }
 
-      // 6 — Alertas por órdenes ejecutadas
-      if (process.env.ALERT_ON_ORDER === 'true') {
-        for (const item of executedItems) {
-          await this.emailAlert.sendAlert('ORDER_FILLED', {
-            symbol:   item.decision.asset?.symbol,
-            side:     item.decision.signal === 'BUY' ? 'compra' : 'venta',
-            quantity: item.quantity,
-            price:    Number(item.decision.priceAtDecision),
-            pnl:      0,
+        approved++
+
+        if (decision.signal === SIGNALS.SELL) {
+          const position = await positionRepository.findByAsset(decision.assetId)
+          const buyPrice = position ? Number(position.avgCost) : decision.priceAtDecision
+
+          const execResult = await this.executionEngine.execute({ ...decision, quantity: riskResult.quantity })
+          if (execResult.success) {
+            executed++
+            const gainPct = ((decision.priceAtDecision - buyPrice) / buyPrice * 100).toFixed(2)
+            await this.whatsappAlert.sendAlert('SELL_EXECUTED', {
+              symbol:    decision.asset?.symbol,
+              sellPrice: decision.priceAtDecision,
+              buyPrice,
+              gainPct,
+            })
+            if (process.env.ALERT_ON_ORDER === 'true') {
+              await this.emailAlert.sendAlert('ORDER_FILLED', {
+                symbol:   decision.asset?.symbol,
+                side:     'SELL',
+                quantity: riskResult.quantity,
+                price:    decision.priceAtDecision,
+                pnl:      (decision.priceAtDecision - buyPrice) * riskResult.quantity,
+              })
+            }
+          }
+        } else if (decision.signal === SIGNALS.BUY) {
+          const signalData = decision.strategyInstance?.lastSignalData
+            ?? { score: 0, confidence: 0, signals: [] }
+
+          await orderRepository.insert({
+            decisionId: decision.id,
+            assetId:    decision.assetId,
+            side:       'BUY',
+            quantity:   0,
+            price:      decision.priceAtDecision,
+            status:     'pending_manual',
           })
+
+          await this.whatsappAlert.sendAlert('BUY_SIGNAL', {
+            symbol:      decision.asset?.symbol,
+            price:       decision.priceAtDecision,
+            score:       signalData.score,
+            confidence:  signalData.confidence,
+            signals:     signalData.signals,
+            dashboardUrl: process.env.DASHBOARD_URL || '',
+          })
+
+          logger.info('Alerta BUY enviada por WhatsApp', {
+            symbol:     decision.asset?.symbol,
+            confidence: signalData.confidence,
+            score:      signalData.score,
+          })
+          executed++
         }
       }
 

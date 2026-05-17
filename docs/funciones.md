@@ -2,6 +2,62 @@
 
 ---
 
+## src/monitoring/whatsappAlert.js
+
+### sendAlert(type, data)  *(async)*
+**Qué hace:** Envía un mensaje WhatsApp via Twilio al número configurado. Si el módulo no está configurado (`isConfigured=false`), retorna silenciosamente. Si el envío falla, loguea el error — nunca relanza. Formatea el body según el tipo de evento.
+**Parámetros:**
+- `type` — `'BUY_SIGNAL'` | `'SELL_EXECUTED'` | `'CRITICAL_ERROR'`
+- `data` — campos específicos por tipo:
+  - BUY_SIGNAL: `{ symbol, price, score, confidence, signals[], dashboardUrl }`
+  - SELL_EXECUTED: `{ symbol, sellPrice, buyPrice, gainPct }`
+  - CRITICAL_ERROR: `{ message }`
+**Retorna:** `Promise<void>`
+**Efectos secundarios:** envía mensaje WhatsApp via Twilio API; loguea éxito o error
+**Llamada desde:** `src/orchestrator/orchestrator.js`
+
+---
+
+## src/strategy/buyScoreCalculator.js
+
+### calculateBuyScore(bars, currentPrice)
+**Qué hace:** Calcula el score de oportunidad de compra (0-9 puntos) sobre datos históricos diarios. Primero verifica el filtro duro SMA50: si currentPrice > SMA50, retorna bloqueado con score=0. Luego suma puntos por z-score, RSI, Bollinger Bands y volumen.
+**Parámetros:** `bars` — array de price_history ordenado por date asc; `currentPrice` — precio actual
+**Retorna:** `{ score, confidence, details[], blocked, insufficientData, blockedReason?, zScore?, rsiVal?, bbVal? }`
+**Efectos secundarios:** ninguno (función pura)
+**Llamada desde:** `src/strategy/strategies/buyScoreStrategy.js`
+
+### stdDev(arr)
+**Qué hace:** Calcula la desviación estándar poblacional de un array de números.
+**Parámetros:** `arr` — array de números
+**Retorna:** número (0 si arr está vacío)
+**Efectos secundarios:** ninguno
+**Llamada desde:** `calculateBuyScore()`
+
+---
+
+## src/strategy/strategies/sellTakeProfitStrategy.js
+
+### evaluate(prices, indicators)  *(async)*
+**Qué hace:** Implementa la lógica de take profit. Consulta la posición del activo en DB; si no hay posición, retorna HOLD. Si hay posición, compara precioActual con el objetivo (avgCost × (1 + TAKE_PROFIT_PCT%)). Siempre compara contra avgCost, nunca contra precio histórico anterior.
+**Parámetros:** `prices` — array de price_ticks más viejo primero; `indicators` — ignorado
+**Retorna:** `Promise<'SELL' | 'HOLD'>`
+**Efectos secundarios:** loguea debug con avgCost, objetivo y precio actual; loguea info cuando alcanza take profit
+**Llamada desde:** `BaseStrategy.run()`
+
+---
+
+## src/strategy/strategies/buyScoreStrategy.js
+
+### evaluate(prices, indicators)  *(async)*
+**Qué hace:** Detecta oportunidades de compra usando scoring. Obtiene histórico diario via priceHistoryRepository, calcula score con buyScoreCalculator, aplica filtro intradiario (precio no bajando en la ventana de N horas), evita alertas duplicadas el mismo día. Guarda los datos de señal en `lastSignalData` para el Orchestrator.
+**Parámetros:** `prices` — array de price_ticks más viejo primero; `indicators` — ignorado
+**Retorna:** `Promise<'BUY' | 'HOLD'>`
+**Efectos secundarios:** loguea debug con score y razón de bloqueo; loguea info con score y confianza al generar BUY
+**Llamada desde:** `BaseStrategy.run()`
+
+---
+
 ## src/monitoring/emailAlert.js
 
 ### sendAlert(type, data)  *(async)*

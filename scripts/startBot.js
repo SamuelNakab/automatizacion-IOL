@@ -7,6 +7,7 @@ import { updateUnrealizedPnl, confirmOrderFilled } from '../src/orchestrator/pos
 import { pollPendingOrders, resolveOrphanOrders }  from '../src/orchestrator/orderPoller.js'
 import Orchestrator          from '../src/orchestrator/orchestrator.js'
 import * as emailAlert       from '../src/monitoring/emailAlert.js'
+import * as whatsappAlert    from '../src/monitoring/whatsappAlert.js'
 import { RISK_CONFIG }       from '../src/shared/riskConfig.js'
 import logger                from '../src/shared/logger.js'
 
@@ -44,6 +45,7 @@ const orchestrator = new Orchestrator({
   positionUpdater,
   orderPoller,
   emailAlert,
+  whatsappAlert,
 })
 
 await orchestrator.start()

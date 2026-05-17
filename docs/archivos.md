@@ -50,6 +50,38 @@
 
 ---
 
+## src/monitoring/ (Fase 7A + Fase Nueva B)
+
+### whatsappAlert.js
+**Propósito:** Singleton de alertas por WhatsApp via Twilio. Se auto-configura al importar con las 4 variables TWILIO_*. Si alguna falta, desactiva alertas silenciosamente. Un fallo de envío se loguea y se ignora — nunca detiene el bot.
+**Exporta:** `sendAlert(type, data)` (named export, async)
+**Usado por:** `src/orchestrator/orchestrator.js`, `scripts/startBot.js`
+**Depende de:** `twilio`, `src/shared/logger.js`, `process.env`
+
+---
+
+## src/strategy/ (Fase Nueva B)
+
+### buyScoreCalculator.js
+**Propósito:** Función pura de scoring de oportunidades de compra. Aplica 4 criterios: z-score (3 pts), RSI (2-3 pts), Bollinger Bands (1-2 pts), volumen (1 pt). Filtro duro: si precio > SMA50 retorna score=0 bloqueado. Máximo posible: 9 puntos.
+**Exporta:** `calculateBuyScore(bars, currentPrice)`, `stdDev(arr)` (named exports)
+**Usado por:** `src/strategy/strategies/buyScoreStrategy.js`
+**Depende de:** `src/strategy/indicators.js`
+
+### strategies/buyScoreStrategy.js
+**Propósito:** Estrategia de detección de oportunidades de compra. Combina el scoring diario de buyScoreCalculator con confirmación intradiaria (precio no bajando) y deduplicación por día. NUNCA llama a executionEngine — genera BUY solo como alerta.
+**Exporta:** `default class BuyScoreStrategy extends BaseStrategy`
+**Usado por:** `src/strategy/strategyEngine.js`
+**Depende de:** `src/strategy/baseStrategy.js`, `src/strategy/buyScoreCalculator.js`, `src/persistence/priceHistoryRepository.js`, `src/shared/constants.js`, `src/shared/logger.js`
+
+### strategies/sellTakeProfitStrategy.js
+**Propósito:** Estrategia de venta automática por take profit. Compara precio actual vs avgCost de la posición abierta. Si precioActual >= avgCost × (1 + TAKE_PROFIT_PCT/100) → SELL. Si no hay posición: siempre HOLD. NUNCA compara contra precio anterior o velas.
+**Exporta:** `default class SellTakeProfitStrategy extends BaseStrategy`
+**Usado por:** `src/strategy/strategyEngine.js`
+**Depende de:** `src/strategy/baseStrategy.js`, `src/persistence/positionRepository.js`, `src/shared/constants.js`, `src/shared/logger.js`
+
+---
+
 ## src/monitoring/ (Fase 7A)
 
 ### emailAlert.js

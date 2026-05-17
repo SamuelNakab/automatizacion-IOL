@@ -34,7 +34,7 @@ export default class BaseStrategy {
   async run(prices) {
     if (prices.length < 2) return SIGNALS.HOLD
     const indicators = this.computeIndicators(prices)
-    const signal = this.evaluate(prices, indicators)
+    const signal = await this.evaluate(prices, indicators)
     if (!Object.values(SIGNALS).includes(signal)) {
       throw new Error('evaluate() retornó señal inválida: ' + signal)
     }

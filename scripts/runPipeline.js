@@ -57,13 +57,27 @@ for (const decision of decisions) {
 
   if (riskResult.approved) {
     approved++
-    const execResult = await engine.execute({ ...decision, quantity: riskResult.quantity })
-    executed++
-    logger.info('Resultado de ejecución', {
-      symbol:   decision.asset.symbol,
-      signal:   decision.signal,
-      execResult,
-    })
+    if (decision.signal === 'SELL') {
+      const execResult = await engine.execute({ ...decision, quantity: riskResult.quantity })
+      executed++
+      logger.info('Resultado de ejecución SELL', { symbol: decision.asset.symbol, execResult })
+    } else if (decision.signal === 'BUY') {
+      // BUY nunca llama a executionEngine — crea pending_manual
+      await orderRepository.insert({
+        decisionId: decision.id,
+        assetId:    decision.assetId,
+        side:       'BUY',
+        quantity:   0,
+        price:      decision.priceAtDecision,
+        status:     'pending_manual',
+      })
+      executed++
+      logger.info('BUY: orden pending_manual creada (requiere acción manual)', {
+        symbol:     decision.asset.symbol,
+        price:      decision.priceAtDecision,
+        confidence: decision.strategyInstance?.lastSignalData?.confidence ?? 0,
+      })
+    }
   } else {
     logger.info('→ RECHAZADA por Risk Manager', {
       symbol: decision.asset.symbol,

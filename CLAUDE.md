@@ -1,8 +1,9 @@
-markdown# CLAUDE.md — Trading Bot IOL
+# CLAUDE.md — Trading Bot IOL
 
 ## Contexto del proyecto
 Sistema de trading algorítmico multi-activo integrado con la API de InvertirOnline (IOL).
-Node.js + Express + PostgreSQL + Prisma. Opera sobre el mercado argentino de capitales.
+Node.js + PostgreSQL + Prisma. Opera sobre el mercado argentino de capitales.
+Dos algoritmos separados: compra (alerta manual) y venta (automática por take profit).
 
 ## Stack tecnológico
 - Runtime: Node.js 20+ con ESModules (import/export, no require)
@@ -11,108 +12,123 @@ Node.js + Express + PostgreSQL + Prisma. Opera sobre el mercado argentino de cap
 - Logging: Winston (structured JSON logs)
 - Config: dotenv
 - Testing: Vitest
-- Linter: ESLint con reglas estándar
+- Alertas: Nodemailer (email) + Twilio (WhatsApp)
 
 ## Estructura de directorios
 src/
-auth/           # Token manager de IOL (obtención y renovación automática)
-market-data/    # Market Data Service (cotizaciones, series históricas)
-strategy/       # Strategy Engine (señales por activo)
-risk/           # Risk Manager (validación de decisiones)
+auth/           # Token manager de IOL
+market-data/    # Market Data Service
+strategy/
+baseStrategy.js
+indicators.js
+buyScoreCalculator.js    # Sistema de scoring de compra (9 puntos)
+strategyEngine.js
+strategies/
+buyScoreStrategy.js    # Detecta oportunidades de compra
+sellTakeProfitStrategy.js  # Take profit automático
+myStrategy.js          # Reservado — no usar
+risk/           # Risk Manager
 execution/      # Execution Engine
 persistence/    # Repositorios de acceso a DB
-orchestrator/   # Scheduler y coordinación del ciclo
-monitoring/     # Métricas, alertas, dashboard
-shared/         # Types, constantes, utilidades comunes
+orchestrator/
+orchestrator.js
+positionUpdater.js
+orderPoller.js
+dailyUpdater.js
+monitoring/
+emailAlert.js
+whatsappAlert.js
+metricsServer.js
+shared/
+assets.js
+constants.js
+marketHours.js
+riskConfig.js
 prisma/
 schema.prisma
 migrations/
 scripts/
+startBot.js
+backfill.js
+runDailyUpdate.js
+runBacktest.js
+runBacktestV2.js
+checkDb.js
+runPipeline.js
 docs/
+archivos.md
+funciones.md
+backtest_results.md
+backtest_v2_results.md
+DEPLOY.md
 tests/
 unit/
-integration/
 
 ## Reglas críticas de desarrollo
 
 ### Variables de entorno
-- NUNCA hardcodear credenciales, URLs de API, o configuración sensible
+- NUNCA hardcodear credenciales ni configuración sensible
 - Toda config va en .env, el código la lee desde process.env
-- El archivo .env.example debe existir siempre con las keys necesarias sin valores reales
+- .env.example siempre actualizado con todas las keys sin valores
 
 ### Autenticación con IOL
-- El bearer token de IOL expira cada 15 minutos
-- SIEMPRE usar src/auth/tokenManager.js para obtener headers autenticados
-- El token manager renueva automáticamente sin que los llamadores lo sepan
-- Nunca llamar a la API de IOL directamente sin pasar por el token manager
+- Bearer token expira cada 15 minutos
+- SIEMPRE usar src/auth/tokenManager.js
+- Nunca llamar a IOL directamente sin pasar por el token manager
 
 ### Entorno
-- IOL_BASE_URL=https://api.invertironline.com es el único entorno disponible
-- DRY_RUN=true debe estar activo en todo momento hasta la Fase 8
+- IOL_BASE_URL=https://api.invertironline.com
+- DRY_RUN=true obligatorio hasta Fase 8
 
 ### Logging
-- Usar Winston en todos los módulos, nunca console.log en código de producción
+- Winston en todos los módulos, nunca console.log
+- Formato JSON estructurado con timestamp
 - Log levels: error, warn, info, debug
-- Cada evento relevante del bot DEBE loguearse con contexto (símbolo, precio, decisión, motivo)
-- Formato: JSON estructurado con timestamp
 
 ### Manejo de errores
 - Nunca dejar promesas sin catch
-- Los errores de red hacia IOL deben tener retry con backoff exponencial (máximo 3 intentos)
-- Un error en un activo NO debe interrumpir el ciclo de otros activos
-- Loguear siempre el error completo antes de continuar
+- Retry con backoff exponencial en llamadas a IOL (máximo 3 intentos)
+- Un error en un activo NO interrumpe el ciclo de los demás
 
 ### Base de datos
-- Usar siempre los repositorios en src/persistence/, nunca Prisma Client directamente
-- Toda escritura de decisión u orden DEBE ser persistida antes de ejecutarse
-- Usar transacciones Prisma cuando hay múltiples escrituras relacionadas
+- Siempre usar repositorios en src/persistence/
+- Nunca Prisma Client directamente fuera de prismaClient.js
+- Transacciones para múltiples escrituras relacionadas
 
-### Separación de responsabilidades (CRÍTICO)
-- El Strategy Engine SOLO genera señales. No ejecuta, no persiste, no llama a IOL.
-- El Risk Manager SOLO valida. No ejecuta, no genera señales.
-- El Execution Engine SOLO envía órdenes ya validadas. No decide nada.
-- El Orchestrator coordina el flujo. No contiene lógica de negocio.
+### Separación de responsabilidades
+- Strategy Engine: SOLO genera señales
+- Risk Manager: SOLO valida
+- Execution Engine: SOLO envía órdenes validadas
+- Orchestrator: coordina, sin lógica de negocio
 
-## RESTRICCIÓN ABSOLUTA — Execution Engine y estrategia
+## RESTRICCIÓN ABSOLUTA
 
-### Execution Engine
-El archivo src/execution/executionEngine.js bajo ningún concepto puede
-enviar órdenes reales a IOL mientras DRY_RUN=true.
-Si DRY_RUN=true → loguear la orden como "SIMULADA" y retornar sin llamar a IOL.
-CERO llamadas a POST /api/v2/operar/Comprar o POST /api/v2/operar/Vender
-mientras DRY_RUN=true.
+### DRY_RUN
+executionEngine.js NUNCA envía órdenes reales con DRY_RUN=true.
+CERO llamadas a POST /api/v2/operar mientras DRY_RUN=true.
 
-### Estrategia personalizada
-src/strategy/strategies/myStrategy.js es el archivo donde se implementará
-la estrategia ganadora del backtesting. El método evaluate() actualmente
-retorna SIGNALS.HOLD y debe mantenerse así hasta la Fase Nueva B.
-NUNCA modificar myStrategy.js salvo instrucción explícita.
+### Estrategias activas
+Las dos estrategias activas son buyScoreStrategy y sellTakeProfitStrategy.
+myStrategy.js existe como referencia pero NO se usa en el STRATEGY_MAP.
+NUNCA modificar myStrategy.js.
 
-### Lógica de ejecución por tipo de señal
-Cuando la estrategia esté implementada (Fase Nueva B):
-- Señal SELL → el bot ejecuta la venta automáticamente via Execution Engine
-- Señal BUY  → el bot NO ejecuta. Envía alerta por email al usuario y registra
-  la decisión como 'pending_manual'. El usuario decide si comprar según fondos disponibles.
+### Alertas
+whatsappAlert y emailAlert NUNCA lanzan errores que detengan el bot.
+Un fallo de alerta se loguea y se ignora.
 
 ## Lista de activos operados
-```javascriptexport const ASSETS = [
-{ symbol: 'GGAL',  market: 'bCBA', type: 'accion' },
-{ symbol: 'BBAR',  market: 'bCBA', type: 'accion' },
-{ symbol: 'PAMP',  market: 'bCBA', type: 'accion' },
-{ symbol: 'TGSU2', market: 'bCBA', type: 'accion' },
-{ symbol: 'TRAN',  market: 'bCBA', type: 'accion' },
-{ symbol: 'YPFD',  market: 'bCBA', type: 'accion' },
-{ symbol: 'ALUA',  market: 'bCBA', type: 'accion' },
-{ symbol: 'TXAR',  market: 'bCBA', type: 'accion' },
-{ symbol: 'MIRG',  market: 'bCBA', type: 'accion' },
-{ symbol: 'CRES',  market: 'bCBA', type: 'accion' },
+```javascript
+export const ASSETS = [
+  { symbol: 'GGAL',  market: 'bCBA', type: 'accion' },
+  { symbol: 'BBAR',  market: 'bCBA', type: 'accion' },
+  { symbol: 'PAMP',  market: 'bCBA', type: 'accion' },
+  { symbol: 'TGSU2', market: 'bCBA', type: 'accion' },
+  { symbol: 'TRAN',  market: 'bCBA', type: 'accion' },
+  { symbol: 'YPFD',  market: 'bCBA', type: 'accion' },
 ]
-
----
 ```
-CEDEARs y bonos removidos hasta contar con fuente de histórico alternativa.
-Todos los activos son acciones locales del panel BYMA con histórico disponible en IOL.
-```
+ALUA, TXAR, MIRG, CRES removidos — sin histórico en IOL.
+CEDEARs y bonos removidos — sin serie histórica en IOL.
 
 ## Endpoints clave de IOL
 
@@ -123,20 +139,20 @@ Body: username=X&password=Y&grant_type=password
 POST https://api.invertironline.com/token
 Body: refresh_token=X&grant_type=refresh_token
 
-### Market Data (solo GET — lectura)
+### Market Data (solo GET)
 GET /api/v2/{mercado}/Titulos/{simbolo}/Cotizacion
-GET /api/v2/{mercado}/Titulos/{simbolo}/Cotizacion/seriehistorica/{fechaDesde}/{fechaHasta}/ajustada
+GET /api/v2/{mercado}/Titulos/{simbolo}/Cotizacion/seriehistorica/{desde}/{hasta}/ajustada
 
-### Portfolio (solo GET — lectura)
+### Portfolio (solo GET)
 GET /api/v2/portafolio/{pais}
 GET /api/v2/estadocuenta
 
 ### Órdenes (PROHIBIDO con DRY_RUN=true)
-POST /api/v2/operar/Comprar   — PROHIBIDO mientras DRY_RUN=true
-POST /api/v2/operar/Vender    — PROHIBIDO mientras DRY_RUN=true
-DELETE /api/v2/operaciones/{id} — solo para cancelaciones, con precaución
+POST /api/v2/operar/Comprar   — PROHIBIDO
+POST /api/v2/operar/Vender    — PROHIBIDO
+DELETE /api/v2/operaciones/{id} — solo cancelaciones
 
-## Schema de Prisma (fuente de verdad — no modificar sin instrucción explícita)
+## Schema de Prisma (no modificar sin instrucción explícita)
 
 ```prisma
 model Asset {
@@ -244,307 +260,164 @@ model BotState {
 }
 ```
 
-## Repositorios (patrón obligatorio)
-Cada tabla tiene su propio archivo en src/persistence/.
-Los módulos de negocio nunca importan PrismaClient directamente.
-
-- prismaClient.js            — singleton del PrismaClient
+## Repositorios
+- prismaClient.js
 - assetRepository.js         — findAll, findBySymbolAndMarket, upsert
 - priceHistoryRepository.js  — bulkUpsert, getRange, getLatest, count
 - priceTickRepository.js     — insert, getLatest
 - decisionRepository.js      — insert, getRecent
-- orderRepository.js         — insert, updateStatus, getPending, getByAsset
+- orderRepository.js         — insert, updateStatus, getPending, getByAsset, getRecent
 - positionRepository.js      — upsert, findByAsset, findAll
 - botStateRepository.js      — get, update
 
 ## Variables de entorno requeridas
-IOL_USERNAME=              # Email de cuenta IOL
-IOL_PASSWORD=              # Contraseña de cuenta IOL
+IOL_USERNAME=
+IOL_PASSWORD=
 IOL_BASE_URL=https://api.invertironline.com
-DATABASE_URL=              # postgresql://user:pass@host:5432/dbname
-INITIAL_CAPITAL=           # Capital inicial en pesos para bot_state
+DATABASE_URL=
+DIRECT_URL=
 NODE_ENV=development
-POLL_INTERVAL_MS=30000
-DRY_RUN=true               # NUNCA cambiar a false hasta Fase 8
-Risk Manager (opcionales, tienen defaults)
+INITIAL_CAPITAL=
+DRY_RUN=true
+MARKET_OPEN_HOUR=11
+MARKET_CLOSE_HOUR=17
+ORPHAN_ORDER_TIMEOUT_MIN=30
+ORDER_POLL_INTERVAL_MS=60000
+POLL_INTERVAL_MS=300000
 RISK_MAX_CAPITAL_PER_TRADE_PCT=10
 RISK_MAX_EXPOSURE_PER_ASSET_PCT=20
 RISK_MAX_TOTAL_EXPOSURE_PCT=60
 RISK_MAX_DRAWDOWN_PCT=15
 RISK_MIN_OPERATION_INTERVAL_MINUTES=60
-Mercado
-MARKET_OPEN_HOUR=10
-MARKET_CLOSE_HOUR=17
-ORPHAN_ORDER_TIMEOUT_MIN=30
-ORDER_POLL_INTERVAL_MS=60000
-Monitoring HTTP
 MONITORING_PORT=3001
-Alertas email
 ALERT_EMAIL_FROM=
 ALERT_EMAIL_TO=
 ALERT_EMAIL_PASSWORD=
 ALERT_ON_ORDER=true
 ALERT_DRAWDOWN_PCT=10
-Dashboard
 DASHBOARD_URL=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+TWILIO_WHATSAPP_TO=
+BUY_SIGNAL_THRESHOLD=6
+BUY_ZSCORE_THRESHOLD=-1.5
+BUY_RSI_OVERSOLD=35
+BUY_RSI_EXTREME=25
+BUY_INTRADAY_WINDOW_HOURS=2
+TAKE_PROFIT_PCT=8
 
-## Fase 2 — Base de datos
+## Arquitectura de estrategias
 
-### Seed inicial
-prisma/seed.js inserta los activos y crea la fila inicial de bot_state
-con INITIAL_CAPITAL del .env. Correr con: npx prisma db seed
+### Algoritmo de VENTA (automático)
+Archivo: src/strategy/strategies/sellTakeProfitStrategy.js
+- Solo opera activos que están en la tabla positions
+- Nunca genera SELL sobre activos sin posición abierta
+- Comparación SIEMPRE contra avgCost de la posición:
+  precioActual >= avgCost * (1 + TAKE_PROFIT_PCT/100)
+- Fuente de precio: último price_tick disponible
+- Nunca compara contra precio de ayer ni contra velas anteriores
 
-### Repositorios
-Ver lista completa en la sección "Repositorios" arriba.
-Cada repositorio importa solo prismaClient.js.
+### Algoritmo de COMPRA (alerta, no ejecuta)
+Archivo: src/strategy/strategies/buyScoreStrategy.js
+Calculador: src/strategy/buyScoreCalculator.js
 
-## Fase 3 — Strategy Engine
+Sistema de scoring sobre datos DIARIOS (price_history):
+  z-score < -1.5      → 3 puntos
+  z-score < -1.0      → 1 punto
+  RSI < 35            → 2 puntos
+  RSI < 25            → 1 punto extra
+  precio <= BB lower  → 2 puntos
+  precio < BB middle  → 1 punto
+  volumen > media 10d → 1 punto
+  Máximo posible: 9 puntos
 
-### Arquitectura
-Cada estrategia extiende BaseStrategy e implementa evaluate().
-Una instancia por activo. strategyEngine.runCycle() coordina todo.
+Filtro duro: si precioActual > SMA50 → score = 0
+Filtro intradiario: si precio actual < precio hace 2 horas → posponer
+No alerta dos veces el mismo día para el mismo activo.
 
-### Señales válidas
-- 'BUY'  → evaluada por el Risk Manager. En Fase Nueva B: dispara email, no ejecuta.
-- 'SELL' → evaluada por el Risk Manager. En Fase Nueva B: se ejecuta automáticamente.
-- 'HOLD' → no se persiste, no se evalúa.
+Confianza = round(score / 9 * 100)%
+Umbral mínimo: BUY_SIGNAL_THRESHOLD puntos
 
-### Indicadores disponibles en indicators.js
-- sma(prices, period)
-- ema(prices, period)
-- rsi(prices, period)
-- bollingerBands(prices, period, stdDev)
-- macd(prices, fast, slow, signal)
-Todas retornan null si no hay datos suficientes.
-
-### Archivo reservado para estrategia personalizada
-src/strategy/strategies/myStrategy.js — evaluate() retorna SIGNALS.HOLD.
-Se implementará en Fase Nueva B con el algoritmo ganador del backtesting.
-NUNCA modificar este archivo salvo instrucción explícita.
-
-### STRATEGY_MAP en strategyEngine.js
-Define qué estrategia usa cada activo.
-Para cambiar la estrategia de un activo, solo modificar este mapa.
-
-## Fase 4 — Risk Manager + datos históricos
-
-### Tablas de precios (dos granularidades separadas)
-price_history → OHLCV diario, cargado via backfill, para modelos y backtesting
-price_ticks   → cotizaciones en tiempo real del polling, para señales inmediatas
-
-### Script de backfill
-scripts/backfill.js — idempotente (upsert por fecha), se puede correr N veces.
-Carga hasta 5 años de histórico diario por activo via IOL.
-Usa bulkUpsert en chunks de 100 para evitar timeouts de Prisma.
-
-### Job diario de actualización
-src/orchestrator/dailyUpdater.js — corre a las 18:00 ARG días hábiles.
-Pide últimos 7 días a IOL para cada activo y hace upsert en price_history.
-Se activa via node-cron en el Orchestrator.
-También ejecutable manualmente: node scripts/runDailyUpdate.js
-
-### Risk Manager
-src/risk/riskManager.js — clase pura, sin DB, sin IOL.
-Método principal: validate(decision, botState, positions, lastOrderByAsset)
-Retorna: { approved: boolean, reason: string, quantity?: number }
-
-Reglas en cascada (primera que falla rechaza):
-1. MAX_DRAWDOWN_PCT: si drawdown supera el límite, solo SELL
-2. MIN_OPERATION_INTERVAL_MINUTES: tiempo mínimo entre ops del mismo activo
-3. Capital insuficiente para comprar al menos 1 unidad
-4. MAX_EXPOSURE_PER_ASSET_PCT: exposición máxima por activo (solo BUY)
-5. MAX_TOTAL_EXPOSURE_PCT: exposición total del portafolio (solo BUY)
-
-Configuración en src/shared/riskConfig.js, leída desde process.env.
-
-## Fase 5 — Execution Engine
-
-### Restricción DRY_RUN
-DRY_RUN=true en .env es obligatorio hasta la Fase 8.
-executionEngine.js verifica esta variable antes de cualquier envío.
-Si DRY_RUN=true → loguea la orden como "SIMULADA [DRY_RUN]" y retorna.
-iolOrderClient.js NUNCA es llamado con DRY_RUN=true.
-
-### Módulos del Execution Engine
-src/execution/orderBuilder.js     — construye el JSON de orden para IOL (puro)
-src/execution/iolOrderClient.js   — wrapper Axios para endpoints de órdenes
-src/execution/executionEngine.js  — coordina el ciclo completo de una orden
-
-### Método principal
-executionEngine.execute(approvedDecision)
-approvedDecision = { assetId, signal, priceAtDecision, quantity, asset: { symbol, market } }
-Retorna: { success: bool, orderId, status, reason }
+### Flujo en el Orchestrator
+SELL aprobado → executionEngine.execute() → whatsappAlert SELL_EXECUTED
+BUY aprobado  → whatsappAlert BUY_SIGNAL → orderRepository pending_manual
+               → NUNCA llama a executionEngine
 
 ### Estados de orden
-pending          → creada en DB, no enviada
+pending          → creada, no enviada
 sent             → enviada a IOL
-filled           → ejecutada por el mercado
+filled           → ejecutada
 partial          → ejecutada parcialmente
 cancelled        → cancelada
 rejected         → rechazada por IOL
-dry_run          → simulada por DRY_RUN=true
-pending_manual   → BUY que requiere acción manual del usuario (Fase Nueva B)
+dry_run          → simulada con DRY_RUN=true
+pending_manual   → BUY que requiere acción manual del usuario
 
-### Estructura de orden para IOL
-{
-  mercado:  "bCBA",
-  simbolo:  "GGAL",
-  cantidad: 10,
-  precio:   1250.50,
-  plazo:    "t2",
-  validez:  "HOY"
-}
+## Fase 2 — Base de datos
+Seed: npx prisma db seed
+Inserta activos y fila inicial de bot_state con INITIAL_CAPITAL.
 
-### Documentación del código
-docs/archivos.md  — descripción de cada archivo .js del proyecto
-docs/funciones.md — descripción de cada función pública
+## Fase 3 — Strategy Engine
+Señales válidas: BUY, SELL, HOLD
+HOLD no se persiste ni evalúa.
+indicators.js: sma, ema, rsi, bollingerBands, macd — retornan null si datos insuficientes.
+
+## Fase 4 — Risk Manager + histórico
+price_history → OHLCV diario para scoring de compra
+price_ticks   → precio actual para verificación de take profit
+
+Backfill: node scripts/backfill.js (idempotente)
+Daily update: src/orchestrator/dailyUpdater.js (cron 18:00 ARG)
+Manual: node scripts/runDailyUpdate.js
+
+Risk Manager: src/risk/riskManager.js
+validate(decision, botState, positions, lastOrderByAsset)
+→ { approved, reason, quantity }
+
+## Fase 5 — Execution Engine
+DRY_RUN=true → loguea "SIMULADA" sin enviar a IOL.
+orderBuilder.js → construye JSON de orden
+iolOrderClient.js → envía a IOL (solo con DRY_RUN=false)
+executionEngine.js → coordina el ciclo completo
 
 ## Fase 6 — Orchestrator
+Tres schedulers:
+1. Ciclo principal (POLL_INTERVAL_MS)
+2. Order poller (ORDER_POLL_INTERVAL_MS)
+3. Daily updater (cron 18:00 ARG, días hábiles)
 
-### Responsabilidades
-El Orchestrator es el único punto de entrada para la ejecución automática.
-Coordina el flujo completo sin contener lógica de negocio propia.
-Tres schedulers: ciclo principal, order poller, daily updater (cron 18:00 ARG).
+isRunning guard evita solapamiento de ciclos.
+marketHours.js verifica horario 11:00-17:00 ARG lunes a viernes.
 
-### Ciclo principal
-1. Verificar horario de mercado (10:00-17:00 ARG, lunes a viernes)
-2. Obtener cotizaciones via marketDataService
-3. Persistir ticks via priceTickRepository
-4. Correr strategyEngine.runCycle()
-5. Para cada señal BUY o SELL:
-   a. riskManager.validate()
-   b. Si approved: executionEngine.execute()
-6. Actualizar bot_state.lastCycleAt
-7. Loguear resumen del ciclo
+## Fase 7A — Email (Nodemailer)
+src/monitoring/emailAlert.js
+Eventos: BOT_START, ORDER_FILLED, DRAWDOWN_ALERT, CRITICAL_ERROR, BOT_STOP
+Fallo de envío no detiene el bot.
 
-### Prevención de solapamiento
-Flag booleano isRunning. Si el ciclo anterior no terminó, el nuevo se saltea.
+## Fase 7B — Dashboard Vercel
+Repo separado. Lee Neon directamente (solo SELECT).
+URL: configurada en DASHBOARD_URL.
 
-### Transacción al confirmar orden filled
-prisma.$transaction actualiza simultáneamente orders, positions y bot_state.
-Si falla: loguear y NO reintentar automáticamente.
+## Fase Nueva B — Estrategias de corto plazo (PENDIENTE)
+Ver sección "Arquitectura de estrategias" arriba.
+whatsappAlert: src/monitoring/whatsappAlert.js (Twilio)
+Eventos WhatsApp: BUY_SIGNAL (con score y confianza), SELL_EXECUTED
 
-### Detección de órdenes huérfanas
-Al arrancar: buscar órdenes pending/sent de más de ORPHAN_ORDER_TIMEOUT_MIN.
-Consultar estado real en IOL y actualizar en DB.
-
-### Horario de mercado
-Timezone: America/Argentina/Buenos_Aires
-Apertura: MARKET_OPEN_HOUR (default 10)
-Cierre: MARKET_CLOSE_HOUR (default 17)
-Fuera de horario: acumular ticks, no ejecutar pipeline de señales.
-
-## Fase 7A — Alertas por email con Nodemailer
-
-### Módulo principal
-src/monitoring/emailAlert.js — singleton Nodemailer con Gmail + app password.
-Si faltan variables: isConfigured=false, advertencia en log, bot sigue.
-Un error de envío NUNCA detiene el bot.
-
-### Eventos que disparan alerta
-- BOT_START: configuración activa + link al dashboard
-- ORDER_FILLED: símbolo, lado, cantidad, precio, PnL
-- DRAWDOWN_ALERT: drawdown actual vs límite
-- CRITICAL_ERROR: mensaje + contexto
-- BOT_STOP: motivo de detención
-- BUY_MANUAL_REQUIRED (Fase Nueva B): aviso de oportunidad de compra
-  con símbolo, precio sugerido, cantidad sugerida, y link al dashboard
-
-### Integración con Orchestrator
-emailAlert inyectado como dependencia en el constructor del Orchestrator.
-
-## Preparación Fase Nueva A — Activos y datos históricos
-
-### Activos activos en el sistema
-16 activos definidos en src/shared/assets.js (ver sección "Lista de activos").
-GGAL marcado como active=false en DB — no se procesa.
-
-### Job diario
-src/orchestrator/dailyUpdater.js actualiza price_history a las 18:00 ARG.
-Ejecutable manualmente: node scripts/runDailyUpdate.js
-
-### Backfill
-scripts/backfill.js es idempotente. Correrlo cada vez que se agreguen activos nuevos.
-
-## Fase Nueva A — Backtesting (PENDIENTE)
-
-### Objetivo
-Comparar los 5 algoritmos sobre los datos históricos de todos los activos
-y determinar el ganador para implementar en myStrategy.js.
-
-### Los 5 algoritmos a evaluar
-1. RSI Mean Reversion — RSI + z-score
-2. Momentum / Relative Strength — retorno acumulado en ventana temporal
-3. Bollinger Bands Mean Reversion — precio vs bandas superior/inferior
-4. Moving Average Crossover — cruce de medias móviles corta y larga
-5. Volatility Breakout (ATR) — ruptura de rango con aumento de volatilidad
-
-### Métricas de evaluación por algoritmo
-- Retorno total %
-- Win rate (operaciones ganadoras / total)
-- Máximo drawdown
-- Cantidad de operaciones generadas
-- Sharpe ratio simplificado
-
-### Output esperado
-Tabla comparativa de los 5 algoritmos por activo y consolidada.
-Declaración del algoritmo ganador con justificación numérica.
-El usuario revisa y confirma el ganador antes de implementarlo.
-
-### Script
-scripts/runBacktest.js — standalone, no modifica DB, solo lee price_history.
-Lee datos de todos los activos con barras suficientes (mínimo 50).
-Imprime resultados en consola y genera docs/backtest_results.md.
-
-## Fase Nueva B — Implementar algoritmo ganador (PENDIENTE)
-
-### Qué se hace
-1. Implementar el algoritmo ganador en src/strategy/strategies/myStrategy.js
-2. Modificar executionEngine.js para que BUY dispare email en lugar de ejecutar
-3. Agregar estado 'pending_manual' en el flujo de órdenes
-4. Agregar alerta 'BUY_MANUAL_REQUIRED' en emailAlert.js
-
-### Lógica de ejecución
-SELL → executionEngine.execute() → orden real a IOL (con DRY_RUN=false en Fase 8)
-BUY  → emailAlert.sendAlert('BUY_MANUAL_REQUIRED') → orden registrada como 'pending_manual'
-       El usuario decide si ejecuta la compra según fondos disponibles.
-
-## Fase 7C — Deploy en Railway (PENDIENTE)
-Bot corriendo 24/7 en servidor remoto.
-Variables de entorno configuradas en Railway dashboard.
-Restart automático ante fallos.
+## Fase 7C — Deploy Railway (PENDIENTE)
+Bot 24/7 en servidor remoto.
+Ver docs/DEPLOY.md cuando esté creado.
 
 ## Fase 8 — Producción real (PENDIENTE)
-DRY_RUN=false — NUNCA cambiar antes de esta fase.
-Capital mínimo real.
-Monitoreo manual las primeras semanas.
-BotState actualizado con capital real antes de arrancar.
+DRY_RUN=false — NUNCA antes de esta fase.
+Capital real mínimo definido por el usuario.
+
+## Backtesting
+v1: node scripts/runBacktest.js (datos desde 2020)
+v2: node scripts/runBacktestV2.js (desde 2022, filtro dólar, min 8 trades)
+Resultados en docs/backtest_v2_results.md
+Ganador v2: Momentum (referencia, no usado en el bot)
+Los resultados del backtesting son material para el dashboard de análisis.
 
 ## Estado del proyecto
-Ver PROGRESS.md para el detalle de cada fase completada.
-Leer PROGRESS.md antes de cualquier otra cosa al iniciar una sesión.
-
-## Backtesting v2 — Con filtros de calidad (PENDIENTE correr)
-
-### Cambios respecto al backtesting v1
-1. Fecha de inicio: 01/01/2022 (excluye pandemia 2020-2021)
-2. Mínimo de operaciones: 8 trades completos por simulación
-   Si un algoritmo genera menos de 8 trades en el período → descartado
-3. Benchmark de dólar MEP: una estrategia debe superar la apreciación
-   del dólar MEP en el mismo período para ser considerada válida
-4. Benchmark calculado con el ticker GD30 (Global 2030) que IOL
-   sí tiene histórico — precio en pesos / precio en dólares
-   Si no está disponible, usar tipo de cambio oficial desde BCRA
-   como piso mínimo del benchmark
-
-### Métricas adicionales v2
-- Retorno vs dólar: retornoEstrategia% - apreciacionDolar%
-  Si negativo: la estrategia no le ganó al dólar → marcada como inválida
-- Alpha: exceso de retorno sobre el benchmark dólar
-- Solo algoritmos con alpha > 0 Y trades >= 8 son candidatos al ganador
-
-### Script
-scripts/runBacktestV2.js — reemplaza a runBacktest.js para la decisión final
-Lee price_history desde 2022-01-01 en adelante para cada activo.
-Obtiene cotización del dólar MEP del período via IOL o BCRA API.
-Genera docs/backtest_v2_results.md con resultados filtrados.
+Ver PROGRESS.md al inicio de cada sesión.

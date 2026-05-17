@@ -308,3 +308,39 @@ GGAL, BBAR, PAMP, TGSU2, TRAN, YPFD — todos acciones del mercado local bCBA co
 - Benchmark: dólar fallback +1042.86% (105 → 1200 ARS/USD, 2022-2026)
 - Solo Momentum y MA Crossover superan el dólar en activos específicos
 - Ganador con filtros estrictos: **Momentum** (Sharpe 0.52, Return +1452%, vs Dólar +410%)
+
+---
+
+## Fase Nueva B — Estrategias de corto plazo + WhatsApp — COMPLETA
+**Fecha:** 2026-05-17
+
+### Archivos creados / modificados
+| Archivo | Descripción |
+|---|---|
+| `src/monitoring/whatsappAlert.js` | Singleton Twilio. Eventos: BUY_SIGNAL, SELL_EXECUTED, CRITICAL_ERROR. Fallo silenciado |
+| `src/strategy/buyScoreCalculator.js` | Función pura: scoring de compra (0-9 pts). Filtro duro SMA50. z-score, RSI, Bollinger, volumen |
+| `src/strategy/strategies/buyScoreStrategy.js` | Estrategia BUY: score ≥ threshold + confirmación intradiaria + dedup diario. NUNCA llama executionEngine |
+| `src/strategy/strategies/sellTakeProfitStrategy.js` | Estrategia SELL: take profit vs avgCost de position. NUNCA opera activos sin posición |
+| `src/strategy/baseStrategy.js` | `run()` actualizado a `await this.evaluate()` para soportar evaluate() async |
+| `src/strategy/strategyEngine.js` | Reemplazado SmaCrossover por sellTakeProfit (prioridad alta) + buyScore. decisions[] incluye strategyInstance |
+| `src/orchestrator/orchestrator.js` | Inyecta whatsappAlert. SELL → executionEngine + alerts. BUY → pending_manual + WhatsApp |
+| `scripts/startBot.js` | Importa e inyecta whatsappAlert al Orchestrator |
+| `scripts/runPipeline.js` | BUY crea pending_manual en lugar de llamar executionEngine |
+| `tests/unit/strategy/buyScoreCalculator.test.js` | 7 tests: insuficiente, SMA50 filtro, z-score, RSI, Bollinger, confidence, details |
+| `tests/unit/strategy/sellTakeProfitStrategy.test.js` | 5 tests: sin posición, precio bajo, precio exacto, precio alto, logger.debug |
+| `tests/unit/monitoring/whatsappAlert.test.js` | 5 tests: sin config, con Twilio ok, Twilio falla, BUY body, SELL body |
+| `tests/unit/strategy/strategyEngine.test.js` | Actualizado para mocks de SellTakeProfitStrategy y BuyScoreStrategy |
+
+### Verificaciones completadas
+1. ✅ `npx vitest run` → **143/143 tests** (22 archivos de test)
+2. ✅ `node scripts/runPipeline.js` → 6 activos, cada uno pasa por sellTakeProfit (HOLD, sin posición) luego buyScore (HOLD, ticks insuficientes). Sin errores.
+3. ✅ WhatsApp BUY_SIGNAL entregado a whatsapp:+5491125365163 — confirmado en logs
+4. ✅ sellTakeProfitStrategy NUNCA genera SELL para activos sin posición en positions
+5. ✅ `DRY_RUN=true` en .env
+6. ✅ `POLL_INTERVAL_MS=300000` en .env
+7. ✅ `myStrategy.js` intacto — NO aparece en STRATEGY_MAP
+
+### Flujo de señales en producción
+- **SELL aprobado** → executionEngine.execute() [DRY_RUN] → whatsappAlert SELL_EXECUTED + emailAlert ORDER_FILLED
+- **BUY aprobado** → orderRepository.insert(pending_manual) → whatsappAlert BUY_SIGNAL → usuario ejecuta manualmente
+- **HOLD** → ninguna acción
