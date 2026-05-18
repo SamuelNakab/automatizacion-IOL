@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { setupMetricsServer } from '../src/monitoring/metricsServer.js'
 import { getQuote }          from '../src/market-data/marketDataService.js'
 import * as strategyEngine   from '../src/strategy/strategyEngine.js'
 import RiskManager           from '../src/risk/riskManager.js'
@@ -10,6 +11,9 @@ import * as emailAlert       from '../src/monitoring/emailAlert.js'
 import * as whatsappAlert    from '../src/monitoring/whatsappAlert.js'
 import { RISK_CONFIG }       from '../src/shared/riskConfig.js'
 import logger                from '../src/shared/logger.js'
+
+// Arrancar servidor HTTP para health checks (Render/UptimeRobot)
+setupMetricsServer()
 
 // SEGURIDAD: El bot no puede arrancar sin DRY_RUN=true
 if (process.env.DRY_RUN !== 'true') {
