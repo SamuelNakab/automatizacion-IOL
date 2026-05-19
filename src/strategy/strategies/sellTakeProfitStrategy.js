@@ -6,14 +6,16 @@ import logger             from '../../shared/logger.js'
 export default class SellTakeProfitStrategy extends BaseStrategy {
   constructor(asset) {
     super(asset)
-    this.name          = 'sellTakeProfit'
-    this.takeProfitPct = Number(process.env.TAKE_PROFIT_PCT || 8)
+    this.name             = 'sellTakeProfit'
+    this.takeProfitPct    = Number(process.env.TAKE_PROFIT_PCT || 8)
+    this.lastDecisionData = null
   }
 
   async evaluate(prices, indicators) {
     const position = await positionRepository.findByAsset(this.asset.id)
 
     if (!position || Number(position.quantity) <= 0) {
+      this.lastDecisionData = null
       return SIGNALS.HOLD
     }
 
@@ -22,6 +24,8 @@ export default class SellTakeProfitStrategy extends BaseStrategy {
     const precioActual = Number(prices[prices.length - 1].price)
     const avgCost      = Number(position.avgCost)
     const objetivo     = avgCost * (1 + this.takeProfitPct / 100)
+
+    this.lastDecisionData = { takeProfitPct: this.takeProfitPct, avgCost, targetPrice: objetivo }
 
     logger.debug('Verificando take profit', {
       symbol:         this.asset.symbol,

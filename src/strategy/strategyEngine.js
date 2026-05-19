@@ -54,16 +54,37 @@ export async function runCycle() {
         strategy: strategyUsed.name,
       })
 
-      if (signal === SIGNALS.BUY || signal === SIGNALS.SELL) {
-        const dbDecision = await decisionRepository.insert(
-          asset.id, signal, strategyUsed.name, lastPrice, null
-        )
-        decisions.push({
-          ...dbDecision,
-          priceAtDecision:  Number(dbDecision.priceAtDecision),
-          asset:            { symbol: asset.symbol, market: asset.market },
-          strategyInstance: strategyUsed,
-        })
+      // Persistir TODAS las señales (incluyendo HOLD) cuando hay precio disponible.
+      // Sin precio no se puede insertar (priceAtDecision es NOT NULL en el schema).
+      if (lastPrice !== null) {
+        try {
+          let metadata = null
+          if (strategyUsed.name === 'buyScore') {
+            const ed = strategyUsed.lastEvaluationData
+            if (ed) metadata = { score: ed.score, confidence: ed.confidence }
+          } else if (strategyUsed.name === 'sellTakeProfit') {
+            metadata = strategyUsed.lastDecisionData ?? null
+          }
+
+          const dbDecision = await decisionRepository.insert(
+            asset.id, signal, strategyUsed.name, lastPrice, metadata
+          )
+
+          if (signal === SIGNALS.BUY || signal === SIGNALS.SELL) {
+            decisions.push({
+              ...dbDecision,
+              priceAtDecision:  Number(dbDecision.priceAtDecision),
+              asset:            { symbol: asset.symbol, market: asset.market },
+              strategyInstance: strategyUsed,
+            })
+          }
+        } catch (persistErr) {
+          logger.error('Error al persistir decisión', {
+            symbol: asset.symbol,
+            signal,
+            error:  persistErr.message,
+          })
+        }
       }
 
       results[signal] = (results[signal] ?? 0) + 1

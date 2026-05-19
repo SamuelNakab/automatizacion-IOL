@@ -62,13 +62,13 @@ describe('strategyEngine.runCycle()', () => {
     expect(result.decisions[0].asset.symbol).toBe('GGAL')
   })
 
-  it('NO persiste decision cuando la señal es HOLD', async () => {
+  it('NO persiste decision cuando no hay precio disponible (lastPrice=null)', async () => {
     const { findAll }   = await import('../../../src/persistence/assetRepository.js')
     const { getLatest } = await import('../../../src/persistence/priceTickRepository.js')
     const { insert }    = await import('../../../src/persistence/decisionRepository.js')
 
     findAll.mockResolvedValue([{ id: 1, symbol: 'GGAL', market: 'bCBA', type: 'accion', active: true }])
-    getLatest.mockResolvedValue([])
+    getLatest.mockResolvedValue([])  // sin ticks → lastPrice=null → no se puede persistir
     insert.mockResolvedValue({ id: 1 })
 
     const { runCycle } = await import('../../../src/strategy/strategyEngine.js')
@@ -76,6 +76,28 @@ describe('strategyEngine.runCycle()', () => {
 
     expect(insert).not.toHaveBeenCalled()
     expect(result.decisions).toHaveLength(0)
+  })
+
+  it('persiste señal HOLD cuando hay precio disponible, pero NO la agrega a decisions[]', async () => {
+    const { findAll }   = await import('../../../src/persistence/assetRepository.js')
+    const { getLatest } = await import('../../../src/persistence/priceTickRepository.js')
+    const { insert }    = await import('../../../src/persistence/decisionRepository.js')
+
+    findAll.mockResolvedValue([{ id: 1, symbol: 'GGAL', market: 'bCBA', type: 'accion', active: true }])
+    getLatest.mockResolvedValue([{ price: '100', capturedAt: new Date() }])
+    insert.mockResolvedValue({ id: 5, assetId: 1, signal: 'HOLD', priceAtDecision: 100 })
+
+    mockSellRun.mockResolvedValue('HOLD')
+    mockBuyRun.mockResolvedValue('HOLD')
+
+    const { runCycle } = await import('../../../src/strategy/strategyEngine.js')
+    const result = await runCycle()
+
+    // HOLD con precio → insert llamado
+    expect(insert).toHaveBeenCalledWith(1, 'HOLD', expect.any(String), expect.any(Number), null)
+    // HOLD no va al Risk Manager
+    expect(result.decisions).toHaveLength(0)
+    expect(result.HOLD).toBe(1)
   })
 
   it('un error en un activo no interrumpe el procesamiento de los demás', async () => {

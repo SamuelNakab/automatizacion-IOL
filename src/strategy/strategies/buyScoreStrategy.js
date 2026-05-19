@@ -12,6 +12,7 @@ export default class BuyScoreStrategy extends BaseStrategy {
     this.intradayWindowHours = Number(process.env.BUY_INTRADAY_WINDOW_HOURS || 2)
     this.lastAlertDate       = null
     this.lastSignalData      = null
+    this.lastEvaluationData  = null
   }
 
   async evaluate(prices, indicators) {
@@ -25,6 +26,14 @@ export default class BuyScoreStrategy extends BaseStrategy {
 
     const bars   = [...rawBars].sort((a, b) => new Date(a.date) - new Date(b.date))
     const result = calculateBuyScore(bars, precioActual)
+
+    // Guardar datos de evaluación para metadata de persistencia (todos los outcomes)
+    this.lastEvaluationData = {
+      score:            result.score,
+      confidence:       result.confidence,
+      blocked:          result.blocked,
+      insufficientData: result.insufficientData,
+    }
 
     if (result.blocked || result.insufficientData) {
       logger.debug('Score bloqueado', {
