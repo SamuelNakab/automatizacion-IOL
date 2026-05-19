@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: trading-bot-iol
-    runtime: node
-    buildCommand: npm install
-    startCommand: node scripts/startBot.js
-    envVars:
-      - key: NODE_ENV
-        value: production

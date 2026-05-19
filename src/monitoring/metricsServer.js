@@ -4,7 +4,7 @@ import logger from '../shared/logger.js'
 let server = null
 
 export function setupMetricsServer() {
-  // Render asigna el puerto via PORT; MONITORING_PORT es el fallback local
+  // PORT es asignado por la plataforma (Railway/Render); MONITORING_PORT es el fallback local
   const port = Number(process.env.PORT || process.env.MONITORING_PORT || 3001)
 
   server = http.createServer((req, res) => {
