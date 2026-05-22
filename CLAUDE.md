@@ -421,3 +421,21 @@ Los resultados del backtesting son material para el dashboard de análisis.
 
 ## Estado del proyecto
 Ver PROGRESS.md al inicio de cada sesión.
+
+### Cambio pendiente — Opción F: precios en USD (Mayo 2026)
+Se agrega soporte para precios en dólares MEP en paralelo a los pesos.
+
+Nueva tabla: exchange_rates
+  - date (Date, unique)
+  - mep_rate (Float) — precio del dólar MEP ese día
+  - source (String) — 'ambito' o 'forward_fill'
+  - created_at (DateTime)
+
+Cambio en price_history: nueva columna close_usd (Float, nullable)
+  close_usd = close / mep_rate del mismo día
+  Nullable porque se llena en el backfill posterior, no en la migración.
+
+IMPORTANTE: usar el mismo workaround de migración que en Fase 1:
+  prisma migrate diff --script para generar SQL
+  prisma migrate deploy para aplicar
+  Nunca usar prisma migrate dev (falla en entorno no-interactivo)

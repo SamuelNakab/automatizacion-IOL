@@ -37,6 +37,7 @@ model PriceHistory {
   high      Decimal
   low       Decimal
   close     Decimal
+  closeUsd  Float?   @map("close_usd")
   volume    BigInt?
   source    String   @default("iol")
 
@@ -126,6 +127,16 @@ model BotState {
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@map("bot_state")
+}
+
+model ExchangeRate {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @unique
+  mepRate   Float    @map("mep_rate")
+  source    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("exchange_rates")
 }
 
 model ModelPrediction {
