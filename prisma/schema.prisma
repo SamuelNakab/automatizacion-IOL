@@ -16,11 +16,14 @@ model Asset {
   active    Boolean   @default(true)
   createdAt DateTime  @default(now()) @map("created_at")
 
-  priceHistory  PriceHistory[]
-  priceTicks    PriceTick[]
-  decisions     Decision[]
-  orders        Order[]
-  positions     Position[]
+  priceHistory     PriceHistory[]
+  priceTicks       PriceTick[]
+  decisions        Decision[]
+  orders           Order[]
+  positions        Position[]
+  modelPredictions ModelPrediction[]
+  modelMetrics     ModelMetric[]
+  modelAnalyses    ModelAnalysis[]
 
   @@unique([symbol, market])
   @@map("assets")
@@ -123,4 +126,67 @@ model BotState {
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@map("bot_state")
+}
+
+model ModelPrediction {
+  id             Int      @id @default(autoincrement())
+  assetId        Int      @map("asset_id")
+  modelName      String   @map("model_name")
+  runDate        DateTime @db.Date @map("run_date")
+  horizonDays    Int      @map("horizon_days")
+  targetDate     DateTime @db.Date @map("target_date")
+  pricePredicted Decimal  @map("price_predicted")
+  ciLower80      Decimal? @map("ci_lower_80")
+  ciUpper80      Decimal? @map("ci_upper_80")
+  ciLower95      Decimal? @map("ci_lower_95")
+  ciUpper95      Decimal? @map("ci_upper_95")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, modelName, runDate, targetDate])
+  @@index([assetId, modelName, runDate])
+  @@map("model_predictions")
+}
+
+model ModelMetric {
+  id                Int      @id @default(autoincrement())
+  assetId           Int      @map("asset_id")
+  modelName         String   @map("model_name")
+  runDate           DateTime @db.Date @map("run_date")
+  mae               Decimal?
+  rmse              Decimal?
+  mape              Decimal?
+  directionAccuracy Decimal? @map("direction_accuracy")
+  sharpeSignal      Decimal? @map("sharpe_signal")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, modelName, runDate])
+  @@index([assetId, modelName])
+  @@map("model_metrics")
+}
+
+model ModelAnalysis {
+  id             Int      @id @default(autoincrement())
+  assetId        Int      @map("asset_id")
+  modelName      String   @map("model_name")
+  runDate        DateTime @db.Date @map("run_date")
+  summary        String
+  recommendation String?
+  confidence     Decimal?
+  horizon30d     Json?    @map("horizon_30d")
+  horizon45d     Json?    @map("horizon_45d")
+  horizon60d     Json?    @map("horizon_60d")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, modelName, runDate])
+  @@index([assetId, modelName])
+  @@map("model_analyses")
 }

@@ -344,3 +344,24 @@ GGAL, BBAR, PAMP, TGSU2, TRAN, YPFD — todos acciones del mercado local bCBA co
 - **SELL aprobado** → executionEngine.execute() [DRY_RUN] → whatsappAlert SELL_EXECUTED + emailAlert ORDER_FILLED
 - **BUY aprobado** → orderRepository.insert(pending_manual) → whatsappAlert BUY_SIGNAL → usuario ejecuta manualmente
 - **HOLD** → ninguna acción
+
+---
+
+## Fase Predicciones 1 — Tablas de predicciones agregadas al schema
+**Fecha:** 2026-05-19
+
+Tablas agregadas (migración aditiva, sin modificar ni eliminar nada existente):
+- `model_predictions` — predicciones de precio por modelo, horizonte y fecha objetivo
+- `model_metrics` — métricas de evaluación (MAE, RMSE, MAPE, directionAccuracy, sharpeSignal)
+- `model_analyses` — análisis narrativo con recomendación, confianza y horizonte 30/45/60d
+
+Relaciones en `Asset`: `modelPredictions[]`, `modelMetrics[]`, `modelAnalyses[]`
+
+Migración: `prisma/migrations/20260519000000_add_prediction_tables/migration.sql`
+Aplicada con `prisma migrate deploy` (entorno no-interactivo — mismo workaround que Fase 4).
+
+### Verificaciones
+1. ✅ `npx vitest run` → **144/144 tests** (sin regresiones)
+2. ✅ Las 3 tablas existen vacías en Neon
+3. ✅ Las 8 tablas anteriores tienen sus datos intactos
+4. ✅ `npx prisma migrate status` → "Database schema is up to date!"
