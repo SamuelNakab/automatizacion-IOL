@@ -4,7 +4,7 @@ const TZ = 'America/Argentina/Buenos_Aires'
 
 function getOpenClose() {
   return {
-    openHour:  parseInt(process.env.MARKET_OPEN_HOUR  ?? '10'),
+    openHour:  parseInt(process.env.MARKET_OPEN_HOUR  ?? '11'),
     closeHour: parseInt(process.env.MARKET_CLOSE_HOUR ?? '17'),
   }
 }
@@ -28,12 +28,13 @@ export function getNextOpenTime() {
   const candidate = new Date(zonedNow)
   candidate.setHours(openHour, 0, 0, 0)
 
-  // Si hoy es día hábil y el horario de apertura todavía no pasó
-  if (candidate > zonedNow && candidate.getDay() >= 1 && candidate.getDay() <= 5) {
+  // Si hoy es día hábil y la apertura todavía no pasó
+  const day = candidate.getDay()
+  if (day >= 1 && day <= 5 && candidate > zonedNow) {
     return fromZonedTime(candidate, TZ)
   }
 
-  // Avanzar un día a la vez hasta el próximo día hábil
+  // Avanzar hasta el próximo día hábil (saltea fines de semana)
   do {
     candidate.setDate(candidate.getDate() + 1)
     candidate.setHours(openHour, 0, 0, 0)
