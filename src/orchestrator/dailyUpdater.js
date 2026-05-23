@@ -1,6 +1,8 @@
 import * as assetRepository        from '../persistence/assetRepository.js'
 import * as priceHistoryRepository from '../persistence/priceHistoryRepository.js'
 import { getHistoricalSeries }     from '../market-data/marketDataService.js'
+import { fetchMepToday }           from '../market-data/mepService.js'
+import { upsertExchangeRate, getLastMepRate } from '../persistence/exchangeRateRepository.js'
 import logger                      from '../shared/logger.js'
 
 function dateToString(d) {
@@ -15,8 +17,9 @@ export async function runDailyUpdate() {
   const sevenAgo   = new Date(today)
   sevenAgo.setDate(today.getDate() - 7)
 
+  const todayStr   = dateToString(today)
   const fechaDesde = dateToString(sevenAgo)
-  const fechaHasta = dateToString(today)
+  const fechaHasta = todayStr
 
   const assets = await assetRepository.findAll()
 
@@ -45,4 +48,25 @@ export async function runDailyUpdate() {
   }
 
   logger.info('Daily update completado', { timestamp: new Date() })
+
+  // --- MEP del día ---
+  try {
+    const mepValue = await fetchMepToday()
+    let mepRate, source
+    if (mepValue) {
+      mepRate = mepValue
+      source  = 'ambito'
+    } else {
+      const last = await getLastMepRate()
+      if (!last) throw new Error('Sin MEP disponible')
+      mepRate = last
+      source  = 'forward_fill'
+      logger.warn('MEP de Ambito no disponible, usando forward-fill')
+    }
+    await upsertExchangeRate(today, mepRate, source)
+    const updated = await priceHistoryRepository.updateCloseUsdForDate(todayStr, mepRate)
+    logger.info('MEP diario actualizado', { mepRate, source, rowsUpdated: updated })
+  } catch (err) {
+    logger.error('Error actualizando MEP diario — no es bloqueante', { error: err.message })
+  }
 }

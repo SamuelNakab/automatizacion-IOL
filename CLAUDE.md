@@ -439,3 +439,32 @@ IMPORTANTE: usar el mismo workaround de migración que en Fase 1:
   prisma migrate diff --script para generar SQL
   prisma migrate deploy para aplicar
   Nunca usar prisma migrate dev (falla en entorno no-interactivo)
+
+
+  ### Cambio pendiente — MEP diario automático (Mayo 2026)
+
+El daily updater (src/orchestrator/dailyUpdater.js) debe agregar al
+final de su ejecución diaria (después de actualizar price_history):
+
+1. Fetch del MEP del día desde Ámbito:
+   GET https://mercados.ambito.com/dolar/mep/historico-general/{hoy}/{hoy}
+   donde hoy es DD-MM-YYYY
+   Si Ámbito falla o devuelve vacío: usar el último mep_rate de
+   exchange_rates como fallback (forward-fill de un día).
+
+2. INSERT en exchange_rates:
+   Nuevo archivo: src/persistence/exchangeRateRepository.js
+   Función: upsertExchangeRate(date, mepRate, source)
+   Usa prisma.exchangeRate.upsert por fecha (unique).
+
+3. UPDATE close_usd en price_history del día:
+   Para cada activo, una vez guardado el precio del día:
+   close_usd = close / mep_rate
+   Agregar función updateCloseUsd(date, mepRate) en
+   src/persistence/priceHistoryRepository.js que hace:
+   UPDATE price_history SET close_usd = close / mepRate
+   WHERE DATE(date) = fecha
+
+Axios ya está disponible en el proyecto para el fetch a Ámbito.
+El parseo del valor MEP es igual que en Python:
+  valor string '1.245,50' → reemplazar '.' por '' y ',' por '.' → parseFloat

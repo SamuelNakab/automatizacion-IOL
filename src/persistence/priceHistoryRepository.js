@@ -49,3 +49,12 @@ export async function getLatest(assetId, limit = 1) {
 export async function count(assetId) {
   return prisma.priceHistory.count({ where: { assetId } })
 }
+
+export async function updateCloseUsdForDate(dateStr, mepRate) {
+  const result = await prisma.$executeRaw`
+    UPDATE price_history
+    SET close_usd = CAST(close AS DOUBLE PRECISION) / ${mepRate}
+    WHERE DATE(date) = ${dateStr}::date
+  `
+  return result
+}
