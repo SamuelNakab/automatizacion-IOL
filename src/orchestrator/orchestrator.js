@@ -28,6 +28,7 @@ export default class Orchestrator {
     this.whatsappAlert     = whatsappAlert
 
     this.isRunning      = false
+    this.wasMarketOpen  = null
     this.cycleInterval  = null
     this.pollerInterval = null
     this.dailyCronJob   = null
@@ -88,7 +89,23 @@ export default class Orchestrator {
     const startedAt = Date.now()
 
     try {
-      if (!isMarketOpen()) {
+      const isOpen = isMarketOpen()
+
+      // Detectar cambio de estado y notificar
+      if (this.wasMarketOpen === false && isOpen === true) {
+        logger.info('Mercado abierto — enviando notificación WhatsApp')
+        await this.whatsappAlert.sendAlert('MARKET_OPEN', {}).catch(err =>
+          logger.error('Error enviando MARKET_OPEN', { error: err.message })
+        )
+      } else if (this.wasMarketOpen === true && isOpen === false) {
+        logger.info('Mercado cerrado — enviando notificación WhatsApp')
+        await this.whatsappAlert.sendAlert('MARKET_CLOSE', {}).catch(err =>
+          logger.error('Error enviando MARKET_CLOSE', { error: err.message })
+        )
+      }
+      this.wasMarketOpen = isOpen
+
+      if (!isOpen) {
         logger.info(formatMarketStatus())
         return
       }

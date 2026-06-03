@@ -44,6 +44,29 @@ function buildBody(type, data) {
     return `🚨 Error crítico en el bot\n${data.message}`
   }
 
+  if (type === 'MARKET_OPEN') {
+    const now = new Date()
+    const argTime = new Date(now.getTime() - 3 * 60 * 60 * 1000)
+    const timeStr = argTime.toISOString().slice(11, 16)
+    return [
+      '🔔 Mercado abierto',
+      `Hora: ${timeStr} ARG`,
+      'Bot activo — monitoreando 6 activos',
+      `Ver dashboard: ${process.env.DASHBOARD_URL || ''}`,
+    ].join('\n').trim()
+  }
+
+  if (type === 'MARKET_CLOSE') {
+    const now = new Date()
+    const argTime = new Date(now.getTime() - 3 * 60 * 60 * 1000)
+    const timeStr = argTime.toISOString().slice(11, 16)
+    return [
+      '🔕 Mercado cerrado',
+      `Hora: ${timeStr} ARG`,
+      'Bot en standby hasta el próximo día hábil',
+    ].join('\n').trim()
+  }
+
   return `[${type}] ${JSON.stringify(data)}`
 }
 
