@@ -468,3 +468,17 @@ final de su ejecución diaria (después de actualizar price_history):
 Axios ya está disponible en el proyecto para el fetch a Ámbito.
 El parseo del valor MEP es igual que en Python:
   valor string '1.245,50' → reemplazar '.' por '' y ',' por '.' → parseFloat
+
+  ### Cambio pendiente — Paso 2: notificaciones de mercado
+Agregar al Orchestrator detección de cambio de estado del mercado
+y envío de WhatsApp cuando abre o cierra.
+
+Estado a trackear: this.wasMarketOpen (boolean, iniciar como null)
+En cada runCycle(), antes del guard de isMarketOpen():
+  - Si wasMarketOpen era false/null y ahora es true → MARKET_OPEN alert
+  - Si wasMarketOpen era true y ahora es false → MARKET_CLOSE alert
+  - Actualizar this.wasMarketOpen = isOpen
+
+Nuevos tipos en whatsappAlert.js buildBody():
+  MARKET_OPEN  → "🔔 Mercado abierto — bot activo (11:00 - 17:00 ARG)"
+  MARKET_CLOSE → "🔕 Mercado cerrado — bot en standby"
