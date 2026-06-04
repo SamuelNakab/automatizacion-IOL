@@ -482,3 +482,10 @@ En cada runCycle(), antes del guard de isMarketOpen():
 Nuevos tipos en whatsappAlert.js buildBody():
   MARKET_OPEN  → "🔔 Mercado abierto — bot activo (11:00 - 17:00 ARG)"
   MARKET_CLOSE → "🔕 Mercado cerrado — bot en standby"
+
+### Cambio pendiente — Paso 5b: campo source en assets
+Agregar source VARCHAR(10) DEFAULT 'iol' al modelo Asset.
+Tier 1 (IOL, trading): source='iol', active=true
+Tier 2 (yfinance, solo predicciones): source='yfinance', active=false
+El bot solo opera activos con active=true — los Tier 2 son ignorados.
+Usar workaround de migración ya establecido en este repo.
