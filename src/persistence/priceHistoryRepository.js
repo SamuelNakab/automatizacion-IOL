@@ -71,33 +71,31 @@ export async function needsYahooResync(assetId) {
 
 // Reemplaza el histórico con datos de Yahoo (sobreescribe OHLCV) y deja
 // close_usd en null para recalcularlo con recomputeMissingCloseUsd().
+// Una sola sentencia SQL por activo: guardar ~1700 días fila por fila contra
+// Neon tarda minutos por la latencia de red.
 export async function replaceFromYahoo(assetId, bars) {
-  let processed = 0
-  for (let i = 0; i < bars.length; i += CHUNK_SIZE) {
-    const chunk = bars.slice(i, i + CHUNK_SIZE)
-    const ops = chunk.map(bar => {
-      const date   = new Date(String(bar.date).substring(0, 10))
-      const values = {
-        open:     bar.open,
-        high:     bar.high,
-        low:      bar.low,
-        close:    bar.close,
-        volume:   bar.volume !== null && bar.volume !== undefined ? BigInt(Math.round(bar.volume)) : null,
-        source:   'yahoo',
-        closeUsd: null,
-      }
-      return prisma.priceHistory.upsert({
-        where:  { assetId_date: { assetId, date } },
-        create: { assetId, date, ...values },
-        update: values,
-      })
-    })
-    await prisma.$transaction(ops)
-    processed += chunk.length
-  }
+  const dates  = bars.map(b => String(b.date).substring(0, 10))
+  const opens  = bars.map(b => Number(b.open))
+  const highs  = bars.map(b => Number(b.high))
+  const lows   = bars.map(b => Number(b.low))
+  const closes = bars.map(b => Number(b.close))
+  const vols   = bars.map(b => (b.volume === null || b.volume === undefined ? null : Math.round(Number(b.volume))))
+
+  const upserted = await prisma.$executeRaw`
+    INSERT INTO price_history (asset_id, date, open, high, low, close, volume, source, close_usd)
+    SELECT ${assetId}, t.d::date, t.o, t.h, t.l, t.c, t.v::bigint, 'yahoo', NULL
+    FROM unnest(${dates}::text[], ${opens}::float8[], ${highs}::float8[], ${lows}::float8[],
+                ${closes}::float8[], ${vols}::float8[]) AS t(d, o, h, l, c, v)
+    ON CONFLICT (asset_id, date) DO UPDATE
+      SET open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
+          close = EXCLUDED.close, volume = EXCLUDED.volume,
+          source = 'yahoo', close_usd = NULL
+  `
   // Días que Yahoo no tiene: se borran para no mezclar precios sin ajustar
-  await prisma.priceHistory.deleteMany({ where: { assetId, NOT: { source: 'yahoo' } } })
-  return processed
+  await prisma.$executeRaw`
+    DELETE FROM price_history WHERE asset_id = ${assetId} AND source <> 'yahoo'
+  `
+  return Number(upserted)
 }
 
 // close_usd = close / último MEP con fecha <= día, para filas sin valor
