@@ -26,12 +26,24 @@ describe('yahooMarketData', () => {
     expect(q).toMatchObject({ symbol: 'GGAL', market: 'bCBA', price: 4857.5, high: 4900, low: 4677.5, open: 4742 })
   })
 
-  it('devuelve la serie histórica con fecha local y descarta cierres nulos', async () => {
+  it('devuelve la serie histórica con fecha local y completa la última sesión con regularMarketPrice', async () => {
     const axios = (await import('axios')).default
     axios.get.mockResolvedValue({ data: CHART })
     const { getHistoricalSeries } = await import('../../../src/market-data/yahooMarketData.js')
     const s = await getHistoricalSeries('GGAL', 'bCBA', '2026-11-15', '2026-11-17')
-    expect(s).toHaveLength(1)
+    expect(s).toHaveLength(2)
     expect(s[0]).toMatchObject({ price: 4742, open: 4800, timestamp: '2026-11-16' })
+    expect(s[1]).toMatchObject({ price: 4857.5, open: 4742, timestamp: '2026-11-17' })
+  })
+
+  it('descarta cierres nulos de días que no son la última sesión', async () => {
+    const axios = (await import('axios')).default
+    const chart = structuredClone(CHART)
+    chart.chart.result[0].indicators.quote[0].close = [null, 4800]
+    axios.get.mockResolvedValue({ data: chart })
+    const { getHistoricalSeries } = await import('../../../src/market-data/yahooMarketData.js')
+    const s = await getHistoricalSeries('GGAL', 'bCBA', '2026-11-15', '2026-11-17')
+    expect(s).toHaveLength(1)
+    expect(s[0]).toMatchObject({ price: 4800, timestamp: '2026-11-17' })
   })
 })

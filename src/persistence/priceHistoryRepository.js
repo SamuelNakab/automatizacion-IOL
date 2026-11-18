@@ -18,8 +18,19 @@ export async function bulkUpsert(assetId, bars) {
           low:    bar.low,
           close:  bar.close,
           volume: bar.volume !== null && bar.volume !== undefined ? BigInt(bar.volume) : null,
+          source: 'yahoo',
         },
-        update: {}, // idempotente — nunca sobreescribir datos históricos
+        // Yahoo es la fuente de verdad: se refrescan las barras recientes (corrige
+        // barras parciales). close_usd se recalcula al final del daily update.
+        update: {
+          open:     bar.open,
+          high:     bar.high,
+          low:      bar.low,
+          close:    bar.close,
+          volume:   bar.volume !== null && bar.volume !== undefined ? BigInt(bar.volume) : null,
+          source:   'yahoo',
+          closeUsd: null,
+        },
       })
     })
     await prisma.$transaction(ops)

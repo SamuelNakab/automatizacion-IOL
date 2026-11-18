@@ -78,13 +78,18 @@ export async function getHistoricalSeries(symbol, market, fromDate, toDate) {
     period2:  toUnix(toDate, true),
     interval: '1d',
   })
-  const ts  = result.timestamp ?? []
-  const q   = result.indicators?.quote?.[0] ?? {}
-  const off = result.meta?.gmtoffset ?? -10800
+  const ts   = result.timestamp ?? []
+  const q    = result.indicators?.quote?.[0] ?? {}
+  const meta = result.meta ?? {}
+  const off  = meta.gmtoffset ?? -10800
+
+  // Yahoo deja close=null en la barra de la última sesión hasta que abre la
+  // siguiente; para ese día se usa regularMarketPrice (el último precio operado).
+  const lastTradeDate = meta.regularMarketTime ? exchangeDate(meta.regularMarketTime, off) : null
 
   return ts
     .map((t, i) => ({
-      price:     q.close?.[i]  ?? null,
+      price:     q.close?.[i] ?? (exchangeDate(t, off) === lastTradeDate ? meta.regularMarketPrice ?? null : null),
       open:      q.open?.[i]   ?? null,
       high:      q.high?.[i]   ?? null,
       low:       q.low?.[i]    ?? null,
