@@ -21,7 +21,8 @@ export async function bulkUpsert(assetId, bars) {
           source: 'yahoo',
         },
         // Yahoo es la fuente de verdad: se refrescan las barras recientes (corrige
-        // barras parciales). close_usd se recalcula al final del daily update.
+        // barras parciales). close_usd se recalcula al final del daily update
+        // (sin ponerlo en NULL, para que los modelos nunca lean huecos).
         update: {
           open:     bar.open,
           high:     bar.high,
@@ -29,7 +30,6 @@ export async function bulkUpsert(assetId, bars) {
           close:    bar.close,
           volume:   bar.volume !== null && bar.volume !== undefined ? BigInt(bar.volume) : null,
           source:   'yahoo',
-          closeUsd: null,
         },
       })
     })
@@ -110,20 +110,21 @@ export async function replaceFromYahoo(assetId, bars) {
 }
 
 // close_usd = close / último MEP con fecha <= día, para filas sin valor
-export async function recomputeMissingCloseUsd() {
+// Recalcula close_usd en un solo UPDATE: filas sin close_usd y, si se pasa
+// fromDateStr, todas las filas desde esa fecha (MEP o cierre corregidos).
+// No hay ventana con NULLs visibles para otros lectores.
+export async function recomputeCloseUsd(fromDateStr = null) {
   return prisma.$executeRaw`
     UPDATE price_history ph
     SET close_usd = CAST(ph.close AS DOUBLE PRECISION) / (
       SELECT er.mep_rate FROM exchange_rates er
       WHERE DATE(er.date) <= ph.date
       ORDER BY er.date DESC LIMIT 1)
-    WHERE ph.close_usd IS NULL
+    WHERE (ph.close_usd IS NULL OR ph.date >= ${fromDateStr ?? '9999-12-31'}::date)
       AND EXISTS (SELECT 1 FROM exchange_rates er2 WHERE DATE(er2.date) <= ph.date)
   `
 }
 
-// Invalida close_usd desde una fecha para que se recalcule con el MEP correcto
-export async function resetCloseUsdFrom(dateStr) {
-  return Number(await prisma.$executeRaw`
-    UPDATE price_history SET close_usd = NULL WHERE date >= ${dateStr}::date`)
+export async function recomputeMissingCloseUsd() {
+  return recomputeCloseUsd(null)
 }

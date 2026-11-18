@@ -164,8 +164,12 @@ export async function runDailyUpdate() {
 
   // --- close_usd faltante (filas nuevas, reconstruidas o con MEP corregido) ---
   try {
-    if (recomputeFrom) await priceHistoryRepository.resetCloseUsdFrom(recomputeFrom)
-    const n = await priceHistoryRepository.recomputeMissingCloseUsd()
+    // Barras recientes refrescadas desde Yahoo (ventana de getStartDate) + MEP corregido
+    const tenAgo = new Date(today)
+    tenAgo.setDate(today.getDate() - 10)
+    const refreshFrom = dateToString(tenAgo)
+    const from = recomputeFrom && recomputeFrom < refreshFrom ? recomputeFrom : refreshFrom
+    const n = await priceHistoryRepository.recomputeCloseUsd(from)
     logger.info('close_usd recalculado', { filas: Number(n) })
   } catch (err) {
     logger.error('Error recalculando close_usd — no es bloqueante', { error: err.message })
