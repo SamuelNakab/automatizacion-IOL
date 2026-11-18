@@ -2,7 +2,7 @@ import * as assetRepository        from '../persistence/assetRepository.js'
 import * as priceHistoryRepository from '../persistence/priceHistoryRepository.js'
 import { getHistoricalSeries }     from '../market-data/yahooMarketData.js'
 import { fetchMepToday, fetchMepRange } from '../market-data/mepService.js'
-import { upsertExchangeRate, getLastMepRate } from '../persistence/exchangeRateRepository.js'
+import { upsertExchangeRate, getLastMepRate, deleteTestRates, getRateDatesSince } from '../persistence/exchangeRateRepository.js'
 import logger                      from '../shared/logger.js'
 
 function dateToString(d) {
@@ -49,21 +49,44 @@ async function getStartDate(assetId, today) {
   }
 }
 
-// Completa exchange_rates y close_usd para cada día del hueco (forward-fill)
-async function fillMepGap(fromDate, today) {
-  const rates = await fetchMepRange(fromDate, today)
-  let last = await getLastMepRate().catch(() => null)
-  let filled = 0
-  for (const d = new Date(fromDate); d < today; d.setDate(d.getDate() + 1)) {
-    const key  = dateToString(d)
-    const rate = rates.get(key) ?? last
-    if (!rate) continue
-    last = rate
-    await upsertExchangeRate(new Date(d), rate, rates.has(key) ? 'ambito' : 'forward_fill')
-    await priceHistoryRepository.updateCloseUsdForDate(key, rate)
-    filled++
+// Días hacia atrás en los que se verifica que haya MEP cargado
+const MEP_CHECK_DAYS = 200
+
+// Revisa el MEP de los últimos MEP_CHECK_DAYS días: borra filas de prueba,
+// trae de Ámbito los días faltantes y devuelve desde qué fecha hay que
+// recalcular close_usd (o null si no hubo cambios).
+async function syncMepHistory(today) {
+  const from = new Date(today)
+  from.setDate(today.getDate() - MEP_CHECK_DAYS)
+  const fromStr = dateToString(from)
+
+  const removed = await deleteTestRates()
+  if (removed > 0) logger.warn('Filas de MEP de prueba eliminadas', { filas: removed })
+
+  const have = await getRateDatesSince(fromStr)
+  let firstMissing = null
+  for (const d = new Date(from); d < today; d.setDate(d.getDate() + 1)) {
+    const day = d.getDay()
+    if (day === 0 || day === 6) continue   // fines de semana: sin cotización
+    if (!have.has(dateToString(d))) { firstMissing = new Date(d); break }
   }
-  logger.info('Hueco de MEP completado', { desde: dateToString(fromDate), dias: filled })
+
+  let recomputeFrom = removed > 0 ? fromStr : null
+  if (firstMissing) {
+    const rates = await fetchMepRange(firstMissing, today)
+    let inserted = 0
+    for (const [dateStr, rate] of rates) {
+      if (have.has(dateStr)) continue
+      await upsertExchangeRate(new Date(`${dateStr}T00:00:00Z`), rate, 'ambito')
+      inserted++
+    }
+    logger.info('MEP histórico completado desde Ámbito', { desde: dateToString(firstMissing), dias: inserted })
+    if (inserted > 0) {
+      const f = dateToString(firstMissing)
+      recomputeFrom = recomputeFrom && recomputeFrom < f ? recomputeFrom : f
+    }
+  }
+  return recomputeFrom
 }
 
 export async function runDailyUpdate() {
@@ -73,7 +96,6 @@ export async function runDailyUpdate() {
 
   const todayStr   = dateToString(today)
   const fechaHasta = todayStr
-  let earliestStart = sevenAgo
 
   const assets = await assetRepository.findAll()
 
@@ -97,7 +119,6 @@ export async function runDailyUpdate() {
     try {
       const start      = await getStartDate(asset.id, today)
       const fechaDesde = dateToString(start)
-      if (start < earliestStart) earliestStart = start
       const series = await getHistoricalSeries(asset.symbol, asset.market, fechaDesde, fechaHasta)
 
       const bars = toBars(series)
@@ -112,13 +133,12 @@ export async function runDailyUpdate() {
 
   logger.info('Daily update completado', { timestamp: new Date() })
 
-  // --- Hueco de MEP si el bot estuvo caído más de una semana ---
-  if (earliestStart < sevenAgo) {
-    try {
-      await fillMepGap(earliestStart, today)
-    } catch (err) {
-      logger.error('Error completando hueco de MEP — no es bloqueante', { error: err.message })
-    }
+  // --- MEP histórico: limpiar filas de prueba y completar días faltantes ---
+  let recomputeFrom = null
+  try {
+    recomputeFrom = await syncMepHistory(today)
+  } catch (err) {
+    logger.error('Error sincronizando MEP histórico — no es bloqueante', { error: err.message })
   }
 
   // --- MEP del día ---
@@ -142,8 +162,9 @@ export async function runDailyUpdate() {
     logger.error('Error actualizando MEP diario — no es bloqueante', { error: err.message })
   }
 
-  // --- close_usd faltante (filas nuevas o reconstruidas) ---
+  // --- close_usd faltante (filas nuevas, reconstruidas o con MEP corregido) ---
   try {
+    if (recomputeFrom) await priceHistoryRepository.resetCloseUsdFrom(recomputeFrom)
     const n = await priceHistoryRepository.recomputeMissingCloseUsd()
     logger.info('close_usd recalculado', { filas: Number(n) })
   } catch (err) {

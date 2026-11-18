@@ -110,3 +110,9 @@ export async function recomputeMissingCloseUsd() {
       AND EXISTS (SELECT 1 FROM exchange_rates er2 WHERE DATE(er2.date) <= ph.date)
   `
 }
+
+// Invalida close_usd desde una fecha para que se recalcule con el MEP correcto
+export async function resetCloseUsdFrom(dateStr) {
+  return Number(await prisma.$executeRaw`
+    UPDATE price_history SET close_usd = NULL WHERE date >= ${dateStr}::date`)
+}
