@@ -489,3 +489,12 @@ Tier 1 (IOL, trading): source='iol', active=true
 Tier 2 (yfinance, solo predicciones): source='yfinance', active=false
 El bot solo opera activos con active=true — los Tier 2 son ignorados.
 Usar workaround de migración ya establecido en este repo.
+
+## Modo SOLO ANÁLISIS (Noviembre 2026) — vigente
+- ANALYSIS_ONLY=true hardcodeado en src/shared/constants.js: el bot NUNCA opera.
+- Fuente de precios: Yahoo Finance (src/market-data/yahooMarketData.js), tickers SYMBOL.BA.
+  IOL ya no se usa (ni cotizaciones ni órdenes). Twilio/email opcionales.
+- Única variable obligatoria en Railway: DATABASE_URL.
+- dailyUpdater: al arrancar y a las 18:00 ARG. Si hay histórico viejo de IOL (source != 'yahoo')
+  lo reconstruye completo desde Yahoo (ajustado por splits — YPFD tuvo split 10:1 el 2026-08-03),
+  recupera huecos de MEP y recalcula close_usd faltante.

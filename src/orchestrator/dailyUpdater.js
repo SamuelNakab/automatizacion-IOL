@@ -1,6 +1,6 @@
 import * as assetRepository        from '../persistence/assetRepository.js'
 import * as priceHistoryRepository from '../persistence/priceHistoryRepository.js'
-import { getHistoricalSeries }     from '../market-data/marketDataService.js'
+import { getHistoricalSeries }     from '../market-data/yahooMarketData.js'
 import { fetchMepToday, fetchMepRange } from '../market-data/mepService.js'
 import { upsertExchangeRate, getLastMepRate } from '../persistence/exchangeRateRepository.js'
 import logger                      from '../shared/logger.js'
@@ -10,6 +10,23 @@ function dateToString(d) {
   const m   = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+// Inicio del histórico completo (igual que el backfill original)
+const HISTORY_START = '2020-01-01'
+
+function toBars(series) {
+  return series
+    .filter(bar => bar.timestamp !== null)
+    .map(bar => ({
+      date:   String(bar.timestamp).substring(0, 10),
+      open:   bar.open  ?? bar.price,
+      high:   bar.high  ?? bar.price,
+      low:    bar.low   ?? bar.price,
+      close:  bar.price,
+      volume: bar.volume,
+    }))
+    .filter(bar => bar.close !== null)
 }
 
 // Máximo de días hacia atrás que se recuperan si el bot estuvo caído
@@ -61,23 +78,29 @@ export async function runDailyUpdate() {
   const assets = await assetRepository.findAll()
 
   for (const asset of assets) {
+    // Histórico viejo de IOL (sin ajustar por splits): reconstruir completo desde Yahoo
+    try {
+      if (await priceHistoryRepository.needsYahooResync(asset.id)) {
+        const series = await getHistoricalSeries(asset.symbol, asset.market, HISTORY_START, todayStr)
+        const bars   = toBars(series)
+        if (bars.length > 200) {
+          const n = await priceHistoryRepository.replaceFromYahoo(asset.id, bars)
+          logger.info('Histórico reconstruido desde Yahoo', { symbol: asset.symbol, barras: n })
+          continue
+        }
+        logger.warn('Yahoo devolvió pocas barras, no se reconstruye', { symbol: asset.symbol, barras: bars.length })
+      }
+    } catch (error) {
+      logger.error('Reconstrucción de histórico falló', { symbol: asset.symbol, error: error.message })
+    }
+
     try {
       const start      = await getStartDate(asset.id, today)
       const fechaDesde = dateToString(start)
       if (start < earliestStart) earliestStart = start
       const series = await getHistoricalSeries(asset.symbol, asset.market, fechaDesde, fechaHasta)
 
-      const bars = series
-        .filter(bar => bar.timestamp !== null)
-        .map(bar => ({
-          date:   String(bar.timestamp).substring(0, 10),
-          open:   bar.open  ?? bar.price,
-          high:   bar.high  ?? bar.price,
-          low:    bar.low   ?? bar.price,
-          close:  bar.price,
-          volume: bar.volume,
-        }))
-        .filter(bar => bar.close !== null)
+      const bars = toBars(series)
 
       await priceHistoryRepository.bulkUpsert(asset.id, bars)
 
@@ -117,5 +140,13 @@ export async function runDailyUpdate() {
     logger.info('MEP diario actualizado', { mepRate, source, rowsUpdated: updated })
   } catch (err) {
     logger.error('Error actualizando MEP diario — no es bloqueante', { error: err.message })
+  }
+
+  // --- close_usd faltante (filas nuevas o reconstruidas) ---
+  try {
+    const n = await priceHistoryRepository.recomputeMissingCloseUsd()
+    logger.info('close_usd recalculado', { filas: Number(n) })
+  } catch (err) {
+    logger.error('Error recalculando close_usd — no es bloqueante', { error: err.message })
   }
 }

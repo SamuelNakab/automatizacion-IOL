@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../../src/persistence/assetRepository.js')
 vi.mock('../../../src/persistence/priceHistoryRepository.js')
-vi.mock('../../../src/market-data/marketDataService.js')
+vi.mock('../../../src/market-data/yahooMarketData.js')
 vi.mock('../../../src/shared/logger.js', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
@@ -26,7 +26,7 @@ describe('runDailyUpdate()', () => {
 
   it('llama a getHistoricalSeries para cada activo activo', async () => {
     const { findAll }            = await import('../../../src/persistence/assetRepository.js')
-    const { getHistoricalSeries } = await import('../../../src/market-data/marketDataService.js')
+    const { getHistoricalSeries } = await import('../../../src/market-data/yahooMarketData.js')
     const { bulkUpsert }         = await import('../../../src/persistence/priceHistoryRepository.js')
 
     findAll.mockResolvedValue(MOCK_ASSETS)
@@ -44,7 +44,7 @@ describe('runDailyUpdate()', () => {
 
   it('si un activo falla, los demás se siguen procesando', async () => {
     const { findAll }            = await import('../../../src/persistence/assetRepository.js')
-    const { getHistoricalSeries } = await import('../../../src/market-data/marketDataService.js')
+    const { getHistoricalSeries } = await import('../../../src/market-data/yahooMarketData.js')
     const { bulkUpsert }         = await import('../../../src/persistence/priceHistoryRepository.js')
     const logger                 = (await import('../../../src/shared/logger.js')).default
 
@@ -67,7 +67,7 @@ describe('runDailyUpdate()', () => {
 
   it('bulkUpsert es llamado con las barras normalizadas correctamente', async () => {
     const { findAll }            = await import('../../../src/persistence/assetRepository.js')
-    const { getHistoricalSeries } = await import('../../../src/market-data/marketDataService.js')
+    const { getHistoricalSeries } = await import('../../../src/market-data/yahooMarketData.js')
     const { bulkUpsert }         = await import('../../../src/persistence/priceHistoryRepository.js')
 
     findAll.mockResolvedValue([MOCK_ASSETS[0]])
@@ -96,7 +96,7 @@ describe('runDailyUpdate()', () => {
 
   it('si el bot estuvo caído, pide histórico desde el último día guardado', async () => {
     const { findAll }             = await import('../../../src/persistence/assetRepository.js')
-    const { getHistoricalSeries } = await import('../../../src/market-data/marketDataService.js')
+    const { getHistoricalSeries } = await import('../../../src/market-data/yahooMarketData.js')
     const { bulkUpsert, getLatest } = await import('../../../src/persistence/priceHistoryRepository.js')
 
     const old = new Date()

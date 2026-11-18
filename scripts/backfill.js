@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import * as assetRepository       from '../src/persistence/assetRepository.js'
 import * as priceHistoryRepository from '../src/persistence/priceHistoryRepository.js'
-import { getHistoricalSeries }    from '../src/market-data/marketDataService.js'
+import { getHistoricalSeries }    from '../src/market-data/yahooMarketData.js'
 import prisma                     from '../src/persistence/prismaClient.js'
 import logger                     from '../src/shared/logger.js'
 

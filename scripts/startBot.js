@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { setupMetricsServer } from '../src/monitoring/metricsServer.js'
-import { getQuote }          from '../src/market-data/marketDataService.js'
+import { getQuote }          from '../src/market-data/yahooMarketData.js'
 import * as strategyEngine   from '../src/strategy/strategyEngine.js'
 import RiskManager           from '../src/risk/riskManager.js'
 import ExecutionEngine       from '../src/execution/executionEngine.js'

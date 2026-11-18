@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { ASSETS } from '../src/shared/assets.js';
-import { getQuote } from '../src/market-data/marketDataService.js';
+import { getQuote } from '../src/market-data/yahooMarketData.js';
 import * as assetRepository    from '../src/persistence/assetRepository.js';
 import * as priceTickRepository from '../src/persistence/priceTickRepository.js';
 import logger from '../src/shared/logger.js';
