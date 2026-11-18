@@ -13,9 +13,11 @@ export async function getLastMepRate() {
   return row ? row.mepRate : null
 }
 
-// Borra filas de prueba (source='test') que contaminan el forward-fill
+// Borra la fila de prueba (source='test', 1234.56) y las copias que el
+// forward-fill hizo de ese valor en junio 2026 cuando Ámbito no respondía.
 export async function deleteTestRates() {
-  return Number(await prisma.$executeRaw`DELETE FROM exchange_rates WHERE source = 'test'`)
+  return Number(await prisma.$executeRaw`
+    DELETE FROM exchange_rates WHERE source = 'test' OR mep_rate = 1234.56`)
 }
 
 // Fechas (YYYY-MM-DD) que ya tienen MEP desde una fecha dada
