@@ -1,6 +1,14 @@
 import axios from 'axios'
 import { getAuthHeaders } from '../auth/tokenManager.js'
 import logger from '../shared/logger.js'
+import { ANALYSIS_ONLY } from '../shared/constants.js'
+
+function assertTradingAllowed(action) {
+  if (ANALYSIS_ONLY) {
+    logger.error('Bloqueado: el bot está en modo SOLO ANÁLISIS y nunca opera', { action })
+    throw new Error(`Modo solo análisis: ${action} bloqueado — el bot nunca envía órdenes`)
+  }
+}
 
 // IMPORTANTE: Este módulo NUNCA se llama con DRY_RUN=true.
 // La verificación de DRY_RUN la hace executionEngine.js antes de llamar aquí.
@@ -33,14 +41,17 @@ async function postWithRetry(endpoint, payload) {
 }
 
 export async function sendBuyOrder(orderPayload) {
+  assertTradingAllowed('sendBuyOrder')
   return postWithRetry('/api/v2/operar/Comprar', orderPayload)
 }
 
 export async function sendSellOrder(orderPayload) {
+  assertTradingAllowed('sendSellOrder')
   return postWithRetry('/api/v2/operar/Vender', orderPayload)
 }
 
 export async function cancelOrder(iolOrderId) {
+  assertTradingAllowed('cancelOrder')
   const headers = await getAuthHeaders()
   const response = await axios.delete(
     `${process.env.IOL_BASE_URL}/api/v2/operaciones/${iolOrderId}`,

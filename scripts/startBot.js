@@ -15,14 +15,9 @@ import logger                from '../src/shared/logger.js'
 // Arrancar servidor HTTP para health checks (Render/UptimeRobot)
 setupMetricsServer()
 
-// SEGURIDAD: El bot no puede arrancar sin DRY_RUN=true
-if (process.env.DRY_RUN !== 'true') {
-  logger.error(
-    'DRY_RUN debe ser true. ' +
-    'Cambiarlo a false solo está permitido en Fase 8 con instrucción explícita.'
-  )
-  process.exit(1)
-}
+// SEGURIDAD: el bot funciona en modo SOLO ANÁLISIS (src/shared/constants.js).
+// Se fuerza DRY_RUN=true como segunda capa, sin importar lo que diga Railway.
+process.env.DRY_RUN = 'true'
 
 // Loguear configuración activa (sin credenciales)
 logger.info('Configuración del bot', {

@@ -21,7 +21,7 @@ function buildBody(type, data) {
     const signalLines = (data.signals ?? []).map(s => `  ✓ ${s}`).join('\n')
     const dashLine    = data.dashboardUrl ? `\nVer dashboard: ${data.dashboardUrl}` : ''
     return [
-      `🟢 Oportunidad de compra — ${data.symbol}`,
+      `🟢 Señal de compra (solo análisis) — ${data.symbol}`,
       `Confianza: ${data.confidence}% (${data.score}/9 puntos)`,
       `Precio actual: $${data.price}`,
       '',
@@ -51,7 +51,7 @@ function buildBody(type, data) {
     return [
       '🔔 Mercado abierto',
       `Hora: ${timeStr} ARG`,
-      'Bot activo — monitoreando 6 activos',
+      'Bot de análisis activo — monitoreando activos (no opera)',
       `Ver dashboard: ${process.env.DASHBOARD_URL || ''}`,
     ].join('\n').trim()
   }

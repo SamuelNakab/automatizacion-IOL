@@ -8,7 +8,7 @@ import * as orderRepository     from '../persistence/orderRepository.js'
 import * as botStateRepository  from '../persistence/botStateRepository.js'
 import prisma                   from '../persistence/prismaClient.js'
 import logger                   from '../shared/logger.js'
-import { SIGNALS }              from '../shared/constants.js'
+import { SIGNALS, ANALYSIS_ONLY } from '../shared/constants.js'
 
 const POLL_INTERVAL_MS       = () => parseInt(process.env.POLL_INTERVAL_MS       ?? '30000')
 const ORDER_POLL_INTERVAL_MS = () => parseInt(process.env.ORDER_POLL_INTERVAL_MS ?? '60000')
@@ -48,11 +48,16 @@ export default class Orchestrator {
       logger.error('Error enviando alerta BOT_START', { error: err.message })
     }
 
-    await this.orderPoller.resolveOrphanOrders()
+    // En modo solo análisis no hay órdenes que resolver ni consultar en IOL
+    if (!ANALYSIS_ONLY) await this.orderPoller.resolveOrphanOrders()
     await this.runCycle()
 
     this.cycleInterval  = setInterval(() => this.runCycle(),              POLL_INTERVAL_MS())
-    this.pollerInterval = setInterval(() => this.orderPoller.pollPendingOrders(), ORDER_POLL_INTERVAL_MS())
+    if (!ANALYSIS_ONLY) {
+      this.pollerInterval = setInterval(() => this.orderPoller.pollPendingOrders(), ORDER_POLL_INTERVAL_MS())
+    } else {
+      logger.info('Modo SOLO ANÁLISIS: el bot no opera — sin ejecución ni polling de órdenes')
+    }
 
     // Cron job diario a las 18:00 ARG (21:00 UTC, Argentina es UTC-3)
     this.dailyCronJob = cron.schedule('0 21 * * 1-5', async () => {
@@ -138,6 +143,34 @@ export default class Orchestrator {
       // 5 — Validar y ejecutar cada decisión
       let approved = 0
       let executed = 0
+
+      // Modo solo análisis: las señales se guardan (ya persistidas por el
+      // strategyEngine) y se avisan, pero NUNCA se ejecutan ni crean órdenes.
+      if (ANALYSIS_ONLY) {
+        for (const decision of decisions) {
+          if (decision.signal === SIGNALS.BUY) {
+            const signalData = decision.strategyInstance?.lastSignalData
+              ?? { score: 0, confidence: 0, signals: [] }
+            await this.whatsappAlert.sendAlert('BUY_SIGNAL', {
+              symbol:       decision.asset?.symbol,
+              price:        decision.priceAtDecision,
+              score:        signalData.score,
+              confidence:   signalData.confidence,
+              signals:      signalData.signals,
+              dashboardUrl: process.env.DASHBOARD_URL || '',
+            }).catch(err => logger.error('Error enviando BUY_SIGNAL', { error: err.message }))
+          }
+          logger.info('Señal registrada (solo análisis, sin ejecución)', {
+            symbol: decision.asset?.symbol, signal: decision.signal,
+          })
+        }
+        logger.info('Resumen del ciclo', {
+          duracionMs: Date.now() - startedAt,
+          senales: { BUY: BUY ?? 0, SELL: SELL ?? 0, HOLD: HOLD ?? 0 },
+          modo: 'solo_analisis',
+        })
+        return
+      }
 
       for (const decision of decisions) {
         const botState  = await botStateRepository.get()
