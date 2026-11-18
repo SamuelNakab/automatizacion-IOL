@@ -93,4 +93,24 @@ describe('runDailyUpdate()', () => {
       close: 105,
     })
   })
+
+  it('si el bot estuvo caído, pide histórico desde el último día guardado', async () => {
+    const { findAll }             = await import('../../../src/persistence/assetRepository.js')
+    const { getHistoricalSeries } = await import('../../../src/market-data/marketDataService.js')
+    const { bulkUpsert, getLatest } = await import('../../../src/persistence/priceHistoryRepository.js')
+
+    const old = new Date()
+    old.setDate(old.getDate() - 150)
+    findAll.mockResolvedValue([MOCK_ASSETS[0]])
+    getLatest.mockResolvedValue([{ date: old }])
+    getHistoricalSeries.mockResolvedValue(MOCK_SERIES)
+    bulkUpsert.mockResolvedValue(2)
+
+    const { runDailyUpdate } = await import('../../../src/orchestrator/dailyUpdater.js')
+    await runDailyUpdate()
+
+    const desde = getHistoricalSeries.mock.calls[0][2]
+    const y = old.getFullYear(), m = String(old.getMonth() + 1).padStart(2, '0'), d = String(old.getDate()).padStart(2, '0')
+    expect(desde).toBe(`${y}-${m}-${d}`)
+  })
 })

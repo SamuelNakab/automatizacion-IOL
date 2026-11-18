@@ -1,7 +1,7 @@
 import * as assetRepository        from '../persistence/assetRepository.js'
 import * as priceHistoryRepository from '../persistence/priceHistoryRepository.js'
 import { getHistoricalSeries }     from '../market-data/marketDataService.js'
-import { fetchMepToday }           from '../market-data/mepService.js'
+import { fetchMepToday, fetchMepRange } from '../market-data/mepService.js'
 import { upsertExchangeRate, getLastMepRate } from '../persistence/exchangeRateRepository.js'
 import logger                      from '../shared/logger.js'
 
@@ -12,19 +12,59 @@ function dateToString(d) {
   return `${y}-${m}-${day}`
 }
 
+// Máximo de días hacia atrás que se recuperan si el bot estuvo caído
+const MAX_GAP_DAYS = 400
+
+// Desde qué fecha pedir histórico: el último día guardado (si hay un hueco
+// porque el bot estuvo apagado) o, como mínimo, los últimos 7 días.
+async function getStartDate(assetId, today) {
+  const sevenAgo = new Date(today)
+  sevenAgo.setDate(today.getDate() - 7)
+  try {
+    const latest = await priceHistoryRepository.getLatest(assetId, 1)
+    const last   = Array.isArray(latest) && latest[0]?.date ? new Date(latest[0].date) : null
+    if (!last || last >= sevenAgo) return sevenAgo
+    const limit = new Date(today)
+    limit.setDate(today.getDate() - MAX_GAP_DAYS)
+    return last < limit ? limit : last
+  } catch {
+    return sevenAgo
+  }
+}
+
+// Completa exchange_rates y close_usd para cada día del hueco (forward-fill)
+async function fillMepGap(fromDate, today) {
+  const rates = await fetchMepRange(fromDate, today)
+  let last = await getLastMepRate().catch(() => null)
+  let filled = 0
+  for (const d = new Date(fromDate); d < today; d.setDate(d.getDate() + 1)) {
+    const key  = dateToString(d)
+    const rate = rates.get(key) ?? last
+    if (!rate) continue
+    last = rate
+    await upsertExchangeRate(new Date(d), rate, rates.has(key) ? 'ambito' : 'forward_fill')
+    await priceHistoryRepository.updateCloseUsdForDate(key, rate)
+    filled++
+  }
+  logger.info('Hueco de MEP completado', { desde: dateToString(fromDate), dias: filled })
+}
+
 export async function runDailyUpdate() {
   const today      = new Date()
   const sevenAgo   = new Date(today)
   sevenAgo.setDate(today.getDate() - 7)
 
   const todayStr   = dateToString(today)
-  const fechaDesde = dateToString(sevenAgo)
   const fechaHasta = todayStr
+  let earliestStart = sevenAgo
 
   const assets = await assetRepository.findAll()
 
   for (const asset of assets) {
     try {
+      const start      = await getStartDate(asset.id, today)
+      const fechaDesde = dateToString(start)
+      if (start < earliestStart) earliestStart = start
       const series = await getHistoricalSeries(asset.symbol, asset.market, fechaDesde, fechaHasta)
 
       const bars = series
@@ -48,6 +88,15 @@ export async function runDailyUpdate() {
   }
 
   logger.info('Daily update completado', { timestamp: new Date() })
+
+  // --- Hueco de MEP si el bot estuvo caído más de una semana ---
+  if (earliestStart < sevenAgo) {
+    try {
+      await fillMepGap(earliestStart, today)
+    } catch (err) {
+      logger.error('Error completando hueco de MEP — no es bloqueante', { error: err.message })
+    }
+  }
 
   // --- MEP del día ---
   try {

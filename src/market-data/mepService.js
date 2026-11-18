@@ -30,3 +30,27 @@ export async function fetchMepToday() {
     return null
   }
 }
+
+function toDDMMYYYY(d) {
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`
+}
+
+// Devuelve un Map 'YYYY-MM-DD' → mepRate para un rango de fechas (vacío si falla).
+export async function fetchMepRange(fromDate, toDate) {
+  const result = new Map()
+  try {
+    const url = `https://mercados.ambito.com/dolar/mep/historico-general/${toDDMMYYYY(fromDate)}/${toDDMMYYYY(toDate)}`
+    const { data } = await axios.get(url, { timeout: 15000 })
+    const rows = Array.isArray(data) ? data : []
+    for (const row of rows) {
+      if (!Array.isArray(row) || row[0] === 'Fecha') continue
+      const m = String(row[0]).match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/)
+      if (!m) continue
+      const value = parseFloat(String(row[1]).replace(/\./g, '').replace(',', '.'))
+      if (!isNaN(value)) result.set(`${m[3]}-${m[2]}-${m[1]}`, value)
+    }
+  } catch {
+    // Ámbito caído: el llamador hace forward-fill
+  }
+  return result
+}

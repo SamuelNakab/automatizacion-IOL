@@ -48,6 +48,11 @@ export default class Orchestrator {
       logger.error('Error enviando alerta BOT_START', { error: err.message })
     }
 
+    // Al arrancar, completar histórico y MEP (recupera huecos si el bot estuvo caído)
+    await runDailyUpdate().catch(err =>
+      logger.error('Error en daily update de arranque', { error: err.message })
+    )
+
     // En modo solo análisis no hay órdenes que resolver ni consultar en IOL
     if (!ANALYSIS_ONLY) await this.orderPoller.resolveOrphanOrders()
     await this.runCycle()
